@@ -10,7 +10,6 @@ from flask import Flask, jsonify
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['JSON_SORT_KEYS'] = False
-app.config['PORT'] = 5000
 
 
 def getSystemdUnitConfig() -> str:
@@ -23,14 +22,13 @@ After=network.target
 Type=simple
 User=root
 Group=root
-ExecStart=%s %s --port %s
+ExecStart=%s %s --run
 
 [Install]
 WantedBy=multi-user.target
 ''' % (
         sys.executable,
         os.path.abspath(__file__),
-        app.config['PORT'],
     )
     return config
 
@@ -38,7 +36,7 @@ WantedBy=multi-user.target
 def create_service():
     path = '/etc/systemd/system/user_check.service'
     if os.path.exists(path):
-        os.remove(path)
+        return
 
     with open(path, 'w') as f:
         f.write(getSystemdUnitConfig())
@@ -46,14 +44,31 @@ def create_service():
     command = 'systemctl daemon-reload'
     os.system(command)
 
+def check_service() -> bool:
+    command = 'systemctl status user_check.service'
+    result = os.popen(command).readlines()
+
+    for line in result:
+        if 'Active: active' in line:
+            return True
+    
+    return False
 
 def start_service():
+    if check_service():
+        print('Service is already running')
+        return
+
     create_service()
     command = 'systemctl start user_check.service'
     os.system(command)
 
 
 def stop_server():
+    if not check_service():
+        print('Service is not running')
+        return
+        
     command = 'systemctl stop user_check.service'
     os.system(command)
 
@@ -140,6 +155,33 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
         return {'error': str(e)}
 
 
+def create_config_file(port: int = 5000):
+    path = os.path.join(os.path.dirname(__file__), 'config.json')
+
+    if os.path.exists(path):
+        os.remove(path)
+
+    with open(path, 'w') as f:
+        f.write(
+            json.dumps(
+                {
+                    'port': port,
+                },
+                indent=4,
+            )
+        )
+
+
+def start_with_config(config: str):
+    if not os.path.exists(config):
+        raise Exception('Config file not found')
+
+    with open(config) as f:
+        config = json.load(f)
+
+    app.run(host='0.0.0.0', port=config['port'])
+
+
 @app.route('/check/<string:username>')
 def check_user_route(username):
     return jsonify(check_user(username))
@@ -148,11 +190,11 @@ def check_user_route(username):
 def main():
     parser = argparse.ArgumentParser(description='Check user')
     parser.add_argument('--username', type=str)
-    parser.add_argument('--port', type=int, help='Stop server')
+    parser.add_argument('--port', type=int, help='Port to run server')
     parser.add_argument('--json', action='store_true', help='Output in json format')
+    parser.add_argument('--run', action='store_true', help='Run server')
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
-    parser.add_argument('--start-daemon', action='store_true', help='Start daemon')
 
     args = parser.parse_args()
 
@@ -164,19 +206,17 @@ def main():
         print(check_user(args.username))
 
     if args.port:
-        app.config['PORT'] = int(args.port)
-        create_service()
+        create_config_file(args.port)
 
-    if args.start_daemon:
-        start_service()
-        sys.exit(0)
+    if args.run:
+        start_with_config(os.path.join(os.path.expanduser('~'), 'config.json'))
 
     if args.start:
-        app.run(host='0.0.0.0', port=app.config['PORT'])
+        start_service()
+        return
 
     if args.stop:
         stop_server()
-        sys.exit(0)
 
 
 if __name__ == '__main__':
