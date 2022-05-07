@@ -37,9 +37,11 @@ WantedBy=multi-user.target
 
 def create_service():
     path = '/etc/systemd/system/user_check.service'
-    if not os.path.exists(path):
-        with open(path, 'w') as f:
-            f.write(getSystemdUnitConfig())
+    if os.path.exists(path):
+        os.remove(path)
+
+    with open(path, 'w') as f:
+        f.write(getSystemdUnitConfig())
 
     command = 'systemctl daemon-reload'
     os.system(command)
