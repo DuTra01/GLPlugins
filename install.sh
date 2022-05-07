@@ -23,7 +23,7 @@ fi
 if ! [ -x "$(command -v flask)" ]; then
     echo 'Instalando flask'
     pip3 install flask
-fi
+fi   
 
 curl -sL -o chk.py $url
 read -p "Porta: " -e -i 5000 port
