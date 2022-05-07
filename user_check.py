@@ -150,6 +150,8 @@ def main():
     parser.add_argument('--json', action='store_true', help='Output in json format')
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
+    parser.add_argument('--start-daemon', action='store_true', help='Start daemon')
+
     args = parser.parse_args()
 
     if args.username:
@@ -161,12 +163,14 @@ def main():
 
     if args.port:
         app.config['PORT'] = int(args.port)
-        app.run(host='0.0.0.0', port=app.config['PORT'])
-        return
+        create_service()
 
-    if args.start:
+    if args.start_daemon:
         start_service()
         sys.exit(0)
+
+    if args.start:
+        app.run(host='0.0.0.0', port=app.config['PORT'])
 
     if args.stop:
         stop_server()
