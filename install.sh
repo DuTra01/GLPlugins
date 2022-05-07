@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Usage:
+#   chmod +x install.sh
+#   ./install.sh
+
+# Created by: @DuTra01
+
 url='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 
 if ! [ -x "$(command -v pip3)" ]; then
