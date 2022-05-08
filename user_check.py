@@ -167,15 +167,22 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
 
 def create_config_file(port: int = 5000):
     path = os.path.join(os.path.expanduser('~'), 'config.json')
+    exclude = []
 
-    if os.path.exists(path):
-        os.remove(path)
+    try:
+        if os.path.exists(path):
+            with open(path) as f:
+                config = json.load(f)
+                exclude = config.get('exclude', [])
+    except:
+        pass
 
     with open(path, 'w') as f:
         f.write(
             json.dumps(
                 {
                     'port': port,
+                    'exclude': exclude,
                 },
                 indent=4,
             )
