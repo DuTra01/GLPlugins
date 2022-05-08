@@ -363,7 +363,7 @@ def check_user_route(username):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Check user')
+    parser = argparse.ArgumentParser(description='Check user v%s' % __version__)
     parser.add_argument('-u', '--username', type=str)
     parser.add_argument('-p', '--port', type=int, help='Port to run server')
     parser.add_argument('--json', action='store_true', help='Output in json format')
@@ -379,6 +379,8 @@ def main():
 
     parser.add_argument('--exclude', type=str, nargs='+', help='Exclude fields')
     parser.add_argument('--include', type=str, nargs='+', help='Include fields')
+
+    parser.add_argument('--version', action='store_true', help='Show version')
 
     args = parser.parse_args()
     config = CheckerUserConfig()
