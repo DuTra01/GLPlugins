@@ -375,6 +375,11 @@ def main():
     config = CheckerUserConfig()
     service = ServiceManager()
 
+    if not os.path.exists(CheckerManager.EXECUTE_PATH):
+        CheckerManager.create_executable()
+        print('Create executable success')
+        print('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTE_PATH)))
+
     if args.username:
         if args.json:
             print(json.dumps(check_user(args.username), indent=4))
@@ -428,11 +433,6 @@ def main():
         is_update = CheckerManager.check_update()
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
         return
-
-    if not os.path.exists(CheckerManager.EXECUTE_PATH):
-        CheckerManager.create_executable()
-        print('Create executable success')
-        print('Run: {} --help'.format(CheckerManager.EXECUTE_PATH))
 
 
 if __name__ == '__main__':
