@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -262,17 +262,19 @@ class CheckerUserConfig:
 
 class CheckerManager:
     RAW_URL_DATA = 'https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
+    EXECUTE_PATH = '/usr/bin/checker'
 
     @staticmethod
     def create_executable() -> None:
-        if not os.path.exists(__file__):
-            return False
-        
-        of_path = os.path.join(os.path.dirname(__file__), __file__)
-        to_path = os.path.join('/usr/bin', 'checker')
+        of_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), os.path.basename(__file__))
+        to_path = CheckerManager.EXECUTE_PATH
 
         if os.path.exists(to_path):
             os.unlink(to_path)
+
+        print('Creating executable file...')
+        print('From: %s' % of_path)
+        print('To: %s' % to_path)
         
         os.chmod(of_path, 0o755)
         os.symlink(of_path, to_path)
@@ -413,7 +415,11 @@ def main():
         is_update = CheckerManager.check_update()
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
         return
-
+    
+    if not os.path.exists(CheckerManager.EXECUTE_PATH):
+        CheckerManager.create_executable()
+        print('Create executable success')
+        print('Run: {} --help'.format(CheckerManager.EXECUTE_PATH))
 
 if __name__ == '__main__':
     main()
