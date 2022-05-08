@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.0.4'
+__version__ = '0.0.5'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -242,16 +242,20 @@ class CheckerUserConfig:
         self.save_config()
 
     def load_config(self) -> dict:
+        default_config = {
+            'exclude': [],
+            'port': 5000,
+        }
         try:
             if os.path.exists(self.path_config):
                 with open(self.path_config, 'r') as f:
                     data = json.load(f)
-                    return data if isinstance(data, dict) else {}
+                    return data if isinstance(data, dict) else default_config
 
         except Exception:
             pass
 
-        return {}
+        return default_config
 
     def save_config(self, config: dict = None):
         self.config = config or self.config
@@ -341,7 +345,8 @@ def check_user_route(username):
         check = check_user(username)
 
         for name in config.exclude:
-            if check.get(name):
+            if name in check:
+                print('Exclude: %s' % name)
                 del check[name]
 
         return jsonify(check)
@@ -364,6 +369,8 @@ def main():
     parser.add_argument('--update', action='store_true', help='Update server')
     parser.add_argument('--check-update', action='store_true', help='Check update')
 
+    parser.add_argument('--exclude', type=str, nargs='+', help='Exclude fields')
+
     args = parser.parse_args()
     config = CheckerUserConfig()
     service = ServiceManager()
@@ -378,7 +385,12 @@ def main():
     if args.port:
         config.port = args.port
 
+    if args.exclude:
+        config.exclude = args.exclude
+
     if args.run:
+        print('Run server...')
+        print('Config: %s' % json.dumps(config.config, indent=4))
         server = app.run(host='0.0.0.0', port=config.port)
         return server
 
