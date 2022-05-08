@@ -89,6 +89,19 @@ def count_connection(username: str) -> int:
     return len([line for line in result if 'sshd' in line])
 
 
+def create_connection_openvpn(port: int = 7505) -> list:
+    try:
+        import socket
+
+        sock = socket.create_connection(('localhost', port))
+        sock.sendall(b'status\n')
+        data = sock.recv(8192 * 8).decode('utf-8').split('\n')
+        sock.close()
+        return data
+    except:
+        return []
+
+
 def count_connection_openvpn(username: str):
     count = 0
     path = '/var/log/openvpn/status.log'
@@ -96,16 +109,16 @@ def count_connection_openvpn(username: str):
     if not os.path.exists(path):
         path = '/etc/openvpn/openvpn-status.log'
 
-    if not os.path.exists(path):
-        return count
+    data = create_connection_openvpn()
+    if not data and os.path.exists(path):
+        with open(path) as f:
+            data = f.readlines()
 
-    with open(path) as f:
-        for line in f:
-            split = line.split(',')
-            if len(split) > 2 and split[1] == username:
-                count += 1
+    for line in data:
+        if username in line:
+            count += 1
 
-    return count
+    return count // 2 if count > 0 else 0
 
 
 def get_expiration_date(username: str) -> t.Optional[str]:
