@@ -19,7 +19,7 @@ class OpenVPNManager:
     def __init__(self, port: int = 7505):
         self.port = port
         self.config_path = '/etc/openvpn/'
-        self.config_file = 'openvpn.conf'
+        self.config_file = 'server.conf'
         self.log_file = 'openvpn.log'
         self.log_path = '/var/log/openvpn/'
 
@@ -31,10 +31,28 @@ class OpenVPNManager:
     def log(self) -> str:
         return os.path.join(self.log_path, self.log_file)
 
+    def start_manager(self) -> None:
+        if os.path.exists(self.config):
+            with open(self.config, 'r') as f:
+                data = f.readlines()
+
+                management = 'management localhost %d\n' % self.port
+                if management in data:
+                    return
+
+                data.insert(1, management)
+
+            with open(self.config, 'w') as f:
+                f.writelines(data)
+
+            os.system('service openvpn restart')
+
     def count_connections(self, username: str) -> int:
-        import socket as s
+        self.start_manager()
 
         try:
+            import socket as s
+
             soc = s.create_connection(('localhost', self.port), timeout=1)
             soc.send(b'status\n')
             data = soc.recv(8192 * 8).decode('utf-8')
@@ -75,7 +93,7 @@ class ServiceManager:
 
     def start(self):
         status = self.status()
-        if 'Active: inactive' in status:
+        if 'Active: active' not in status:
             os.system('systemctl start %s' % self.CONFIG_SYSTEMD)
             return True
 
@@ -84,7 +102,7 @@ class ServiceManager:
 
     def stop(self):
         status = self.status()
-        if 'Active: active' in status:
+        if 'Active: inactive' not in status:
             os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
             return True
 
@@ -254,6 +272,7 @@ def main():
     parser.add_argument('--stop', action='store_true', help='Stop server')
     parser.add_argument('--status', action='store_true', help='Check server status')
     parser.add_argument('--remove', action='store_true', help='Remove server')
+    parser.add_argument('--restart', action='store_true', help='Restart server')
 
     args = parser.parse_args()
 
@@ -288,6 +307,9 @@ def main():
         service.remove()
         return
 
+    if args.restart:
+        service.restart()
+        return
 
 if __name__ == '__main__':
     main()
