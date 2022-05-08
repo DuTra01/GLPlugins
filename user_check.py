@@ -449,6 +449,10 @@ def main():
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
         return
 
+    if args.version:
+        print(__version__)
+        return
+
     if len(sys.argv) == 1:
         parser.print_help()
 
