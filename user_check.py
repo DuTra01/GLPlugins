@@ -15,110 +15,121 @@ app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['JSON_SORT_KEYS'] = False
 
 
-def getSystemdUnitConfig() -> str:
-    config = '''
-[Unit]
-Description=User check
-After=network.target
+class OpenVPNManager:
+    def __init__(self, port: int = 7505):
+        self.port = port
+        self.config_path = '/etc/openvpn/'
+        self.config_file = 'openvpn.conf'
+        self.log_file = 'openvpn.log'
+        self.log_path = '/var/log/openvpn/'
 
-[Service]
-Type=simple
-User=root
-Group=root
-ExecStart=%s %s --run
+    @property
+    def config(self) -> str:
+        return os.path.join(self.config_path, self.config_file)
 
-[Install]
-WantedBy=multi-user.target
-''' % (
-        sys.executable,
-        os.path.abspath(__file__),
-    )
-    return config
+    @property
+    def log(self) -> str:
+        return os.path.join(self.log_path, self.log_file)
 
+    def count_connections(self, username: str) -> int:
+        import socket as s
 
-def create_service():
-    path = '/etc/systemd/system/user_check.service'
-    if os.path.exists(path):
-        return
+        try:
+            soc = s.create_connection(('localhost', self.port), timeout=1)
+            soc.send(b'status\n')
+            data = soc.recv(8192 * 8).decode('utf-8')
+            soc.close()
+        except:
+            if os.path.exists(self.config):
+                with open(self.config, 'r') as f:
+                    data = f.read()
 
-    with open(path, 'w') as f:
-        f.write(getSystemdUnitConfig())
-
-    command = 'systemctl daemon-reload'
-    os.system(command)
-
-
-def check_service() -> str:
-    command = 'systemctl status user_check.service'
-    result = os.popen(command).readlines()
-    return ''.join(result)
+        if data:
+            count = data.count(username)
+            return count // 2 if count > 0 else 0
+        return 0
 
 
-def service_is_running() -> bool:
-    result = check_service()
+class SSHManager:
+    def count_connections(self, username: str) -> int:
+        command = 'ps -u %s' % username
+        result = os.popen(command).readlines()
+        return len([line for line in result if 'sshd' in line])
 
-    for line in result.split('\n'):
-        if 'Active: active' in line:
+
+class ServiceManager:
+    CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
+    CONFIG_SYSTEMD = 'user_check.service'
+
+    def __init__(self):
+        self.create_systemd_config()
+
+    @property
+    def config(self) -> str:
+        return os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
+
+    def status(self) -> str:
+        command = 'systemctl status %s' % self.CONFIG_SYSTEMD
+        result = os.popen(command).readlines()
+        return ''.join(result)
+
+    def start(self):
+        status = self.status()
+        if 'Active: inactive' in status:
+            os.system('systemctl start %s' % self.CONFIG_SYSTEMD)
             return True
 
-    return False
-
-
-def start_service():
-    if service_is_running():
         print('Service is already running')
-        return
+        return False
 
-    create_service()
-    command = 'systemctl start user_check.service'
-    os.system(command)
+    def stop(self):
+        status = self.status()
+        if 'Active: active' in status:
+            os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
+            return True
 
+        print('Service is already stopped')
+        return False
 
-def stop_server():
-    if not service_is_running():
-        print('Service is not running')
-        return
+    def restart(self) -> bool:
+        command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
+        return os.system(command) == 0
 
-    command = 'systemctl stop user_check.service'
-    os.system(command)
+    def remove(self):
+        os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
+        os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
+        os.system('rm %s' % self.config)
+        os.system('systemctl daemon-reload')
+
+    def create_systemd_config(self):
+        config_template = ''.join(
+            [
+                '[Unit]\n',
+                'Description=User check service\n',
+                'After=network.target\n\n',
+                '[Service]\n',
+                'Type=simple\n',
+                'ExecStart=%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
+                'Restart=always\n',
+                'User=root\n',
+                'Group=root\n\n',
+                '[Install]\n',
+                'WantedBy=multi-user.target\n',
+            ]
+        )
+
+        config_path = os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
+        if not os.path.exists(config_path):
+            with open(config_path, 'w') as f:
+                f.write(config_template)
+
+            os.system('systemctl daemon-reload')
 
 
 def count_connection(username: str) -> int:
-    command = 'ps -u %s' % username
-    result = os.popen(command).readlines()
-    return len([line for line in result if 'sshd' in line])
-
-
-def create_connection_openvpn(port: int = 7505) -> list:
-    try:
-        import socket
-
-        sock = socket.create_connection(('localhost', port))
-        sock.sendall(b'status\n')
-        data = sock.recv(8192 * 8).decode('utf-8').split('\n')
-        sock.close()
-        return data
-    except:
-        return []
-
-
-def count_connection_openvpn(username: str):
-    count = 0
-    path = '/var/log/openvpn/status.log'
-
-    if not os.path.exists(path):
-        path = '/etc/openvpn/openvpn-status.log'
-
-    data = create_connection_openvpn()
-    if not data and os.path.exists(path):
-        with open(path) as f:
-            data = f.readlines()
-
-    for line in data:
-        if username in line:
-            count += 1
-
-    return count // 2 if count > 0 else 0
+    count = SSHManager().count_connections(username)
+    count += OpenVPNManager().count_connections(username)
+    return count
 
 
 def get_expiration_date(username: str) -> t.Optional[str]:
@@ -161,7 +172,7 @@ def get_limiter_connection(username: str) -> int:
 
 def check_user(username: str) -> t.Dict[str, t.Any]:
     try:
-        count = count_connection(username) + count_connection_openvpn(username)
+        count = count_connection(username)
         expiration_date = get_expiration_date(username)
         limit_connection = get_limiter_connection(username)
         expiration_days = get_expiration_days(expiration_date)
@@ -242,6 +253,7 @@ def main():
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
     parser.add_argument('--status', action='store_true', help='Check server status')
+    parser.add_argument('--remove', action='store_true', help='Remove server')
 
     args = parser.parse_args()
 
@@ -258,15 +270,23 @@ def main():
     if args.run:
         start_with_config(os.path.join(os.path.expanduser('~'), 'config.json'))
 
+    service = ServiceManager()
+
     if args.start:
-        start_service()
+        service.start()
         return
 
     if args.stop:
-        stop_server()
+        service.stop()
+        return
 
     if args.status:
-        print(check_service())
+        print(service.status())
+        return
+
+    if args.remove:
+        service.remove()
+        return
 
 
 if __name__ == '__main__':
