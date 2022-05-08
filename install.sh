@@ -10,7 +10,7 @@ url='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 
 if ! [ -x "$(command -v pip3)" ]; then
     echo 'Error: pip3 não está instalado.' >&2
-    echo 'Instale pip3 e execute o script novamente.' >&2
+    echo 'Instalando pip3...'
     
     if ! apt-get install -y python3-pip; then
         echo 'Erro ao instalar pip3' >&2
