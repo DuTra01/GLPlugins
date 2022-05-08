@@ -266,7 +266,7 @@ class CheckerManager:
 
     @staticmethod
     def create_executable() -> None:
-        of_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), os.path.basename(__file__))
+        of_path = os.path.join(os.path.expanduser('~'), 'chk.py')
         to_path = CheckerManager.EXECUTE_PATH
 
         if os.path.exists(to_path):
