@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.1.3'
+__version__ = '0.1.4'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -232,7 +232,7 @@ class CheckerUserConfig:
         self.config['exclude'] = value
         self.save_config()
 
-    def inlude(self, name: str) -> bool:
+    def include(self, name: str) -> bool:
         if name in self.exclude:
             self.exclude.remove(name)
             self.save_config()
