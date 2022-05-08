@@ -297,18 +297,15 @@ class CheckerManager:
     @staticmethod
     def update() -> bool:
         if not CheckerManager.check_update():
-            print('Not found new version')
             return False
 
         data = CheckerManager.get_data()
         if not data:
-            print('Not found new version')
             return False
 
         with open(__file__, 'w') as f:
             f.write(data)
 
-        print('Update success')
         CheckerManager.create_executable()
         return True
 
