@@ -1,4 +1,5 @@
 import os
+from socket import socket
 import sys
 import typing as t
 import argparse
@@ -29,7 +30,12 @@ class OpenVPNManager:
 
     @property
     def log(self) -> str:
-        return os.path.join(self.log_path, self.log_file)
+        path = os.path.join(self.log_path, self.log_file)
+        if os.path.exists(path):
+            return path
+
+        self.log_path = 'openvpn-status.log'
+        return os.path.join(self.config_path, self.log_file)
 
     def start_manager(self) -> None:
         if os.path.exists(self.config):
@@ -47,9 +53,8 @@ class OpenVPNManager:
 
             os.system('service openvpn restart')
 
-    def count_connections(self, username: str) -> int:
+    def count_connection_from_manager(self, username: str) -> int:
         self.start_manager()
-
         try:
             import socket as s
 
@@ -57,16 +62,26 @@ class OpenVPNManager:
             soc.send(b'status\n')
             data = soc.recv(8192 * 8).decode('utf-8')
             soc.close()
-        except:
-            if os.path.exists(self.config):
-                with open(self.config, 'r') as f:
-                    data = f.read()
 
-        if data:
             count = data.count(username)
+
             return count // 2 if count > 0 else 0
+        except Exception:
+            return -1
+
+    def count_connection_from_log(self, username: str) -> int:
+        if os.path.exists(self.log):
+            with open(self.log, 'r') as f:
+                data = f.read()
+                count = data.count(username)
+                return count // 2 if count > 0 else 0
         return 0
 
+    def count_connections(self, username: str) -> int:
+        count = self.count_connection_from_manager(username)
+        if count == -1:
+            count = self.count_connection_from_log(username)
+        return count
 
 class SSHManager:
     def count_connections(self, username: str) -> int:
