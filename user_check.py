@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
+
 import os
-from socket import socket
 import sys
 import typing as t
 import argparse
@@ -259,6 +260,58 @@ class CheckerUserConfig:
             f.write(json.dumps(self.config, indent=4))
 
 
+class CheckerManager:
+    RAW_URL_DATA = 'https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
+
+    @staticmethod
+    def create_executable() -> None:
+        if not os.path.exists(__file__):
+            return False
+        
+        of_path = os.path.join(os.path.dirname(__file__), __file__)
+        to_path = os.path.join('/usr/bin', 'checker')
+
+        if os.path.exists(to_path):
+            os.unlink(to_path)
+        
+        os.chmod(of_path, 0o755)
+        os.symlink(of_path, to_path)
+
+    @staticmethod
+    def get_data() -> str:
+        import requests
+
+        response = requests.get(CheckerManager.RAW_URL_DATA)
+        return response.text
+
+    @staticmethod
+    def check_update() -> bool:
+        data = CheckerManager.get_data()
+
+        if data:
+            version = data.split('__version__ = ')[1].split('\n')[0].strip('\'')
+            return version != __version__
+
+        return False
+
+    @staticmethod
+    def update() -> bool:
+        if not CheckerManager.check_update():
+            print('Not found new version')
+            return False
+
+        data = CheckerManager.get_data()
+        if not data:
+            print('Not found new version')
+            return False
+
+        with open(__file__, 'w') as f:
+            f.write(data)
+
+        print('Update success')
+        CheckerManager.create_executable()
+        return True
+
 def check_user(username: str) -> t.Dict[str, t.Any]:
     try:
         checker = CheckerUserManager(username)
@@ -308,6 +361,9 @@ def main():
     parser.add_argument('--remove', action='store_true', help='Remove server')
     parser.add_argument('--restart', action='store_true', help='Restart server')
 
+    parser.add_argument('--update', action='store_true', help='Update server')
+    parser.add_argument('--check-update', action='store_true', help='Check update')
+
     args = parser.parse_args()
     config = CheckerUserConfig()
     service = ServiceManager()
@@ -344,6 +400,21 @@ def main():
 
     if args.restart:
         service.restart()
+        return
+
+    if args.update:
+        is_update = CheckerManager.update()
+        
+        if is_update:
+            print('Update success')
+            return
+
+        print('Not found new version')
+        return
+
+    if args.check_update:
+        is_update = CheckerManager.check_update()
+        print('Have new version: {}'.format('Yes' if is_update else 'No'))
         return
 
 
