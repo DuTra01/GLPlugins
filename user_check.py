@@ -14,6 +14,7 @@ app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['JSON_SORT_KEYS'] = False
 
+
 def getSystemdUnitConfig() -> str:
     config = '''
 [Unit]
@@ -46,18 +47,25 @@ def create_service():
     command = 'systemctl daemon-reload'
     os.system(command)
 
-def check_service() -> bool:
+
+def check_service() -> str:
     command = 'systemctl status user_check.service'
     result = os.popen(command).readlines()
+    return ''.join(result)
 
-    for line in result:
+
+def service_is_running() -> bool:
+    result = check_service()
+
+    for line in result.split('\n'):
         if 'Active: active' in line:
             return True
-    
+
     return False
 
+
 def start_service():
-    if check_service():
+    if service_is_running():
         print('Service is already running')
         return
 
@@ -67,10 +75,10 @@ def start_service():
 
 
 def stop_server():
-    if not check_service():
+    if not service_is_running():
         print('Service is not running')
         return
-        
+
     command = 'systemctl stop user_check.service'
     os.system(command)
 
@@ -158,7 +166,7 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
 
 
 def create_config_file(port: int = 5000):
-    path = os.path.join(os.path.dirname(__file__), 'config.json')
+    path = os.path.join(os.path.expanduser('~'), 'config.json')
 
     if os.path.exists(path):
         os.remove(path)
@@ -174,19 +182,35 @@ def create_config_file(port: int = 5000):
         )
 
 
+def load_config():
+    path = os.path.join(os.path.expanduser('~'), 'config.json')
+    with open(path) as f:
+        return json.load(f)
+
+
 def start_with_config(config: str):
     if not os.path.exists(config):
         raise Exception('Config file not found')
 
-    with open(config) as f:
-        config = json.load(f)
-
+    config = load_config()
     app.run(host='0.0.0.0', port=config['port'])
 
 
 @app.route('/check/<string:username>')
 def check_user_route(username):
-    return jsonify(check_user(username))
+    try:
+        config = load_config()
+        exclude = config.get('exclude', [])
+
+        check = check_user(username)
+
+        for name in exclude:
+            if check.get(name):
+                del check[name]
+
+        return jsonify(check)
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 
 def main():
@@ -197,6 +221,7 @@ def main():
     parser.add_argument('--run', action='store_true', help='Run server')
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
+    parser.add_argument('--status', action='store_true', help='Check server status')
 
     args = parser.parse_args()
 
@@ -219,6 +244,9 @@ def main():
 
     if args.stop:
         stop_server()
+
+    if args.status:
+        print(check_service())
 
 
 if __name__ == '__main__':
