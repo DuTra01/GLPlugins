@@ -232,6 +232,14 @@ class CheckerUserConfig:
         self.config['exclude'] = value
         self.save_config()
 
+    def inlude(self, name: str) -> bool:
+        if name in self.exclude:
+            self.exclude.remove(name)
+            self.save_config()
+            return True
+
+        return False
+
     @property
     def port(self) -> int:
         return self.config.get('port', 5000)
@@ -370,6 +378,7 @@ def main():
     parser.add_argument('--check-update', action='store_true', help='Check update')
 
     parser.add_argument('--exclude', type=str, nargs='+', help='Exclude fields')
+    parser.add_argument('--include', type=str, nargs='+', help='Include fields')
 
     args = parser.parse_args()
     config = CheckerUserConfig()
@@ -392,6 +401,10 @@ def main():
 
     if args.exclude:
         config.exclude = args.exclude
+
+    if args.include:
+        for name in args.include:
+            config.include(name)
 
     if args.run:
         print('Run server...')
