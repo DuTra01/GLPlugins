@@ -83,6 +83,7 @@ class OpenVPNManager:
             count = self.count_connection_from_log(username)
         return count
 
+
 class SSHManager:
     def count_connections(self, username: str) -> int:
         command = 'ps -u %s' % username
@@ -159,57 +160,115 @@ class ServiceManager:
             os.system('systemctl daemon-reload')
 
 
-def count_connection(username: str) -> int:
-    count = SSHManager().count_connections(username)
-    count += OpenVPNManager().count_connections(username)
-    return count
+class CheckerUserManager:
+    def __init__(self, username: str):
+        self.username = username
+        self.ssh_manager = SSHManager()
+        self.openvpn_manager = OpenVPNManager()
 
+    def get_expiration_date(self) -> t.Optional[str]:
+        command = 'chage -l %s' % self.username
+        result = os.popen(command).readlines()
 
-def get_expiration_date(username: str) -> t.Optional[str]:
-    command = 'chage -l %s' % username
-    result = os.popen(command).readlines()
+        for line in result:
+            line = list(map(str.strip, line.split(':')))
+            if line[0].lower() == 'account expires' and line[1] != 'never':
+                return datetime.strptime(line[1], '%b %d, %Y').strftime('%d/%m/%Y')
 
-    for line in result:
-        line = list(map(str.strip, line.split(':')))
-        if line[0].lower() == 'account expires' and line[1] != 'never':
-            return datetime.strptime(line[1], '%b %d, %Y').strftime('%d/%m/%Y')
+        return None
 
-    return None
+    def get_expiration_days(self, date: str) -> int:
+        if not isinstance(date, str) or date.lower() == 'never' or not isinstance(date, str):
+            return -1
 
+        return (datetime.strptime(date, '%d/%m/%Y') - datetime.now()).days
 
-def get_expiration_days(date: str) -> int:
-    if not isinstance(date, str) or date.lower() == 'never' or not isinstance(date, str):
+    def get_connections(self) -> int:
+        return self.ssh_manager.count_connections(
+            self.username
+        ) + self.openvpn_manager.count_connections(self.username)
+
+    def get_time_online(self) -> t.Optional[str]:
+        command = 'ps -u %s -o etime --no-headers' % self.username
+        result = os.popen(command).readlines()
+        return result[0].strip() if result else None
+
+    def get_limiter_connection(self) -> int:
+        path = '/root/usuarios.db'
+
+        if os.path.exists(path):
+            with open(path) as f:
+                for line in f:
+                    split = line.strip().split()
+                    if len(split) == 2 and split[0] == self.username:
+                        return int(split[1].strip())
+
         return -1
 
-    return (datetime.strptime(date, '%d/%m/%Y') - datetime.now()).days
 
+class CheckerUserConfig:
+    CONFIG_FILE = 'config.json'
+    PATH_CONFIG = '/etc/checker/'
 
-def get_time_online(username: str) -> t.Optional[str]:
-    command = 'ps -u %s -o etime --no-headers' % username
-    result = os.popen(command).readlines()
-    return result[0].strip() if result else None
+    def __init__(self):
+        self.config = self.load_config()
 
+    @property
+    def path_config(self) -> str:
+        path = os.path.join(self.PATH_CONFIG, self.CONFIG_FILE)
 
-def get_limiter_connection(username: str) -> int:
-    path = '/root/usuarios.db'
+        if not os.path.exists(path):
+            os.makedirs(self.PATH_CONFIG, exist_ok=True)
 
-    if os.path.exists(path):
-        with open(path) as f:
-            for line in f:
-                split = line.strip().split()
-                if len(split) == 2 and split[0] == username:
-                    return int(split[1].strip())
+        return path
 
-    return -1
+    @property
+    def exclude(self) -> t.List[str]:
+        return self.config.get('exclude', [])
+
+    @exclude.setter
+    def exclude(self, value: t.List[str]):
+        self.config['exclude'] = value
+        self.save_config()
+
+    @property
+    def port(self) -> int:
+        return self.config.get('port', 5000)
+
+    @port.setter
+    def port(self, value: int):
+        self.config['port'] = value
+        self.save_config()
+
+    def load_config(self) -> dict:
+        try:
+            if os.path.exists(self.path_config):
+                with open(self.path_config, 'r') as f:
+                    data = json.load(f)
+                    return data if isinstance(data, dict) else {}
+
+        except Exception:
+            pass
+
+        return {}
+
+    def save_config(self, config: dict = None):
+        self.config = config or self.config
+
+        with open(self.path_config, 'w') as f:
+            f.write(json.dumps(self.config, indent=4))
 
 
 def check_user(username: str) -> t.Dict[str, t.Any]:
     try:
-        count = count_connection(username)
-        expiration_date = get_expiration_date(username)
-        limit_connection = get_limiter_connection(username)
-        expiration_days = get_expiration_days(expiration_date)
-        time_online = get_time_online(username)
+        checker = CheckerUserManager(username)
+
+        count = checker.get_connections()
+        expiration_date = checker.get_expiration_date()
+        expiration_days = checker.get_expiration_days(expiration_date)
+        limit_connection = checker.get_limiter_connection()
+        time_online = checker.get_time_online()
+
         return {
             'username': username,
             'count_connection': count,
@@ -222,53 +281,13 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
         return {'error': str(e)}
 
 
-def create_config_file(port: int = 5000):
-    path = os.path.join(os.path.expanduser('~'), 'config.json')
-    exclude = []
-
-    try:
-        if os.path.exists(path):
-            with open(path) as f:
-                config = json.load(f)
-                exclude = config.get('exclude', [])
-    except:
-        pass
-
-    with open(path, 'w') as f:
-        f.write(
-            json.dumps(
-                {
-                    'port': port,
-                    'exclude': exclude,
-                },
-                indent=4,
-            )
-        )
-
-
-def load_config():
-    path = os.path.join(os.path.expanduser('~'), 'config.json')
-    with open(path) as f:
-        return json.load(f)
-
-
-def start_with_config(config: str):
-    if not os.path.exists(config):
-        raise Exception('Config file not found')
-
-    config = load_config()
-    app.run(host='0.0.0.0', port=config['port'])
-
-
 @app.route('/check/<string:username>')
 def check_user_route(username):
     try:
-        config = load_config()
-        exclude = config.get('exclude', [])
-
+        config = CheckerUserConfig()
         check = check_user(username)
 
-        for name in exclude:
+        for name in config.exclude:
             if check.get(name):
                 del check[name]
 
@@ -279,8 +298,8 @@ def check_user_route(username):
 
 def main():
     parser = argparse.ArgumentParser(description='Check user')
-    parser.add_argument('--username', type=str)
-    parser.add_argument('--port', type=int, help='Port to run server')
+    parser.add_argument('-u', '--username', type=str)
+    parser.add_argument('-p', '--port', type=int, help='Port to run server')
     parser.add_argument('--json', action='store_true', help='Output in json format')
     parser.add_argument('--run', action='store_true', help='Run server')
     parser.add_argument('--start', action='store_true', help='Start server')
@@ -290,6 +309,8 @@ def main():
     parser.add_argument('--restart', action='store_true', help='Restart server')
 
     args = parser.parse_args()
+    config = CheckerUserConfig()
+    service = ServiceManager()
 
     if args.username:
         if args.json:
@@ -299,12 +320,11 @@ def main():
         print(check_user(args.username))
 
     if args.port:
-        create_config_file(args.port)
+        config.port = args.port
 
     if args.run:
-        start_with_config(os.path.join(os.path.expanduser('~'), 'config.json'))
-
-    service = ServiceManager()
+        server = app.run(host='0.0.0.0', port=config.port)
+        return server
 
     if args.start:
         service.start()
