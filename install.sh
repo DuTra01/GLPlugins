@@ -11,7 +11,7 @@ url='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 if ! [ -x "$(command -v pip3)" ]; then
     echo 'Error: pip3 não está instalado.' >&2
     echo 'Instalando pip3...'
-    
+
     if ! apt-get install -y python3-pip; then
         echo 'Erro ao instalar pip3' >&2
         exit 1
@@ -26,6 +26,7 @@ if ! [ -x "$(command -v flask)" ]; then
 fi   
 
 curl -sL -o chk.py $url
+chmod +x chk.py
 read -p "Porta: " -e -i 5000 port
 
 python3 chk.py --port $port --start
