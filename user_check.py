@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -275,7 +275,7 @@ class CheckerManager:
         print('Creating executable file...')
         print('From: %s' % of_path)
         print('To: %s' % to_path)
-        
+
         os.chmod(of_path, 0o755)
         os.symlink(of_path, to_path)
 
@@ -310,6 +310,7 @@ class CheckerManager:
 
         CheckerManager.create_executable()
         return True
+
 
 def check_user(username: str) -> t.Dict[str, t.Any]:
     try:
@@ -403,7 +404,7 @@ def main():
 
     if args.update:
         is_update = CheckerManager.update()
-        
+
         if is_update:
             print('Update success')
             return
@@ -415,11 +416,12 @@ def main():
         is_update = CheckerManager.check_update()
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
         return
-    
+
     if not os.path.exists(CheckerManager.EXECUTE_PATH):
         CheckerManager.create_executable()
         print('Create executable success')
         print('Run: {} --help'.format(CheckerManager.EXECUTE_PATH))
+
 
 if __name__ == '__main__':
     main()
