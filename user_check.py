@@ -61,11 +61,15 @@ class OpenVPNManager:
 
             soc = s.create_connection(('localhost', self.port), timeout=1)
             soc.send(b'status\n')
-            data = soc.recv(8192 * 8).decode('utf-8')
-            soc.close()
 
-            count = data.count(username)
+            data = b''
+            buf = data
 
+            while b'\r\nEND\r\n' not in buf:
+                buf = soc.recv(1024)
+                data += buf
+
+            count = data.count(username.encode())
             return count // 2 if count > 0 else 0
         except Exception:
             return -1
