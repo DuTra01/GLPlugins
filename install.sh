@@ -13,7 +13,7 @@ if ! [ -x "$(command -v pip3)" ]; then
     echo 'Instalando pip3...'
 
     apt-get update
-    if !apt-get install -y python3-pip; then
+    if ! apt-get install -y python3-pip; then
         echo 'Erro ao instalar pip3' >&2
         exit 1
     else
