@@ -12,7 +12,8 @@ if ! [ -x "$(command -v pip3)" ]; then
     echo 'Error: pip3 não está instalado.' >&2
     echo 'Instalando pip3...'
 
-    if ! apt-get update && apt-get install -y python3-pip; then
+    apt-get update
+    if !apt-get install -y python3-pip; then
         echo 'Erro ao instalar pip3' >&2
         exit 1
     else
