@@ -12,7 +12,10 @@ if ! [ -x "$(command -v pip3)" ]; then
     echo 'Error: pip3 não está instalado.' >&2
     echo 'Instalando pip3...'
 
+    sed -i '/mlocate/d' /var/lib/dpkg/statoverride
+    sed -i '/ssl-cert/d' /var/lib/dpkg/statoverride
     apt-get update
+    
     if ! apt-get install -y python3-pip; then
         echo 'Erro ao instalar pip3' >&2
         exit 1
