@@ -84,9 +84,7 @@ class OpenVPNManager:
 
     def count_connections(self, username: str) -> int:
         count = self.count_connection_from_manager(username)
-        if count == -1:
-            count = self.count_connection_from_log(username)
-        return count
+        return count if count > -1 else self.count_connection_from_log(username)
 
 
 class SSHManager:
