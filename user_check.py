@@ -5,12 +5,13 @@ import sys
 import typing as t
 import argparse
 import json
+import socket
 
 from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.1.6'
+__version__ = '0.1.7'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -25,6 +26,8 @@ class OpenVPNManager:
         self.log_file = 'openvpn.log'
         self.log_path = '/var/log/openvpn/'
 
+        self.start_manager()
+
     @property
     def config(self) -> str:
         return os.path.join(self.config_path, self.config_file)
@@ -37,6 +40,11 @@ class OpenVPNManager:
 
         self.log_path = 'openvpn-status.log'
         return os.path.join(self.config_path, self.log_file)
+
+    def create_connection(self) -> socket.socket:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('localhost', self.port))
+        return sock
 
     def start_manager(self) -> None:
         if os.path.exists(self.config):
@@ -55,11 +63,8 @@ class OpenVPNManager:
             os.system('service openvpn restart')
 
     def count_connection_from_manager(self, username: str) -> int:
-        self.start_manager()
         try:
-            import socket as s
-
-            soc = s.create_connection(('localhost', self.port), timeout=1)
+            soc = self.create_connection()
             soc.send(b'status\n')
 
             data = b''
@@ -69,6 +74,7 @@ class OpenVPNManager:
                 buf = soc.recv(1024)
                 data += buf
 
+            soc.close()
             count = data.count(username.encode())
             return count // 2 if count > 0 else 0
         except Exception:
@@ -86,12 +92,26 @@ class OpenVPNManager:
         count = self.count_connection_from_manager(username)
         return count if count > -1 else self.count_connection_from_log(username)
 
+    def kill_connection(self, username: str) -> None:
+        soc = self.create_connection()
+        soc.send(b'kill %s\n' % username.encode())
+        soc.close()
+
 
 class SSHManager:
     def count_connections(self, username: str) -> int:
         command = 'ps -u %s' % username
         result = os.popen(command).readlines()
         return len([line for line in result if 'sshd' in line])
+
+    def get_pids(self, username: str) -> t.List[int]:
+        command = 'ps -u %s' % username
+        result = os.popen(command).readlines()
+        return [int(line.split()[0]) for line in result if 'sshd' in line]
+
+    def kill_connection(self, username: str) -> None:
+        for pid in self.get_pids(username):
+            os.kill(pid, 9)
 
 
 class ServiceManager:
@@ -207,6 +227,10 @@ class CheckerUserManager:
                         return int(split[1].strip())
 
         return -1
+
+    def kill_connection(self) -> None:
+        self.ssh_manager.kill_connection(self.username)
+        self.openvpn_manager.kill_connection(self.username)
 
 
 class CheckerUserConfig:
@@ -348,6 +372,15 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
         return {'error': str(e)}
 
 
+def kill_user(username: str) -> bool:
+    try:
+        checker = CheckerUserManager(username)
+        checker.kill_connection()
+        return True
+    except Exception:
+        return False
+
+
 @app.route('/check/<string:username>')
 def check_user_route(username):
     try:
@@ -364,6 +397,17 @@ def check_user_route(username):
         return jsonify({'error': str(e)})
 
 
+@app.route('/kill/<string:username>')
+def kill_user_route(username):
+    try:
+        if kill_user(username):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'User not found'})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
 def main():
     parser = argparse.ArgumentParser(description='Check user v%s' % __version__)
     parser.add_argument('-u', '--username', type=str)
@@ -375,6 +419,8 @@ def main():
     parser.add_argument('--status', action='store_true', help='Check server status')
     parser.add_argument('--remove', action='store_true', help='Remove server')
     parser.add_argument('--restart', action='store_true', help='Restart server')
+
+    parser.add_argument('--kill', action='store_true', help='Kill user')
 
     parser.add_argument('--update', action='store_true', help='Update server')
     parser.add_argument('--check-update', action='store_true', help='Check update')
@@ -394,6 +440,12 @@ def main():
         print('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTE_PATH)))
 
     if args.username:
+        if args.kill:
+            if kill_user(args.username):
+                print('Kill user success')
+            else:
+                print('Kill user failed')
+
         if args.json:
             print(json.dumps(check_user(args.username), indent=4))
             return
@@ -449,6 +501,19 @@ def main():
     if args.check_update:
         is_update = CheckerManager.check_update()
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
+        
+        while is_update:
+            response = input('Do you want to update? (Y/n) ')
+
+            if response.lower() == 'y':
+                CheckerManager.update()
+                break
+
+            if response.lower() == 'n':
+                break
+
+            print('Invalid response')
+
         return
 
     if args.version:
