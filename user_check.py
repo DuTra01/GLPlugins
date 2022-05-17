@@ -356,14 +356,14 @@ class CheckerManager:
         return response.text
 
     @staticmethod
-    def check_update() -> bool:
+    def check_update() -> t.Union[bool, str]:
         data = CheckerManager.get_data()
 
         if data:
             version = data.split('__version__ = ')[1].split('\n')[0].strip('\'')
-            return version != __version__
+            return version != __version__, version
 
-        return False
+        return False, __version__
 
     @staticmethod
     def update() -> bool:
@@ -530,8 +530,9 @@ def main():
         return
 
     if args.check_update:
-        is_update = CheckerManager.check_update()
+        is_update, version = CheckerManager.check_update()
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
+        print('Version: {}'.format(version))
 
         while is_update:
             response = input('Do you want to update? (Y/n) ')
