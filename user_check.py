@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.1.7'
+__version__ = '0.1.8'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -109,17 +109,23 @@ class SSHManager:
         result = os.popen(command).readlines()
         return [int(line.split()[0]) for line in result if 'sshd' in line]
 
-    def kill_connection(self, username: str) -> None:
-        for pid in self.get_pids(username):
-            os.kill(pid, 9)
-
+    def kill_connection(self, username: str, limit: int = 1) -> None:
+        pids = self.get_pids(username)
+        if len(pids) > limit:
+            for pid in pids[limit:]:
+                os.kill(pid, 9)
+        
 
 class ServiceManager:
     CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
     CONFIG_SYSTEMD = 'user_check.service'
 
+    CONFIG_AUTO_INIT_PATH = '/etc/init.d/'
+    CONFIG_AUTO_INIT = 'user_check'
+
     def __init__(self):
         self.create_systemd_config()
+        self.create_auto_init_config()
 
     @property
     def config(self) -> str:
@@ -158,6 +164,8 @@ class ServiceManager:
         os.system('rm %s' % self.config)
         os.system('systemctl daemon-reload')
 
+        self.remove_auto_init_config()
+
     def create_systemd_config(self):
         config_template = ''.join(
             [
@@ -181,6 +189,30 @@ class ServiceManager:
                 f.write(config_template)
 
             os.system('systemctl daemon-reload')
+
+    def create_auto_init_config(self):
+        config_template = ''.join(
+            [
+                '#!/bin/sh\n',
+                '#\n',
+                '# chkconfig: 345 80 20\n',
+                '# description: User check service\n\n',
+                '%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
+            ]
+        )
+
+        config_path = os.path.join(self.CONFIG_AUTO_INIT_PATH, self.CONFIG_AUTO_INIT)
+        if not os.path.exists(config_path):
+            with open(config_path, 'w') as f:
+                f.write(config_template)
+
+            os.system('chmod +x %s' % config_path)
+            os.system('update-rc.d %s defaults' % self.CONFIG_AUTO_INIT)
+
+    def remove_auto_init_config(self):
+        config_path = os.path.join(self.CONFIG_AUTO_INIT_PATH, self.CONFIG_AUTO_INIT)
+        if os.path.exists(config_path):
+            os.system('rm %s' % config_path)
 
 
 class CheckerUserManager:
