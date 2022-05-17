@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '0.1.8'
+__version__ = '1.1.1'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -109,11 +109,10 @@ class SSHManager:
         result = os.popen(command).readlines()
         return [int(line.split()[0]) for line in result if 'sshd' in line]
 
-    def kill_connection(self, username: str, limit: int = 1) -> None:
+    def kill_connection(self, username: str) -> None:
         pids = self.get_pids(username)
-        if len(pids) > limit:
-            for pid in pids[limit:]:
-                os.kill(pid, 9)
+        for pid in pids:
+            os.kill(pid, 9)
 
 
 class ServiceManager:
