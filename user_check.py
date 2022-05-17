@@ -114,7 +114,7 @@ class SSHManager:
         if len(pids) > limit:
             for pid in pids[limit:]:
                 os.kill(pid, 9)
-        
+
 
 class ServiceManager:
     CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
@@ -533,7 +533,7 @@ def main():
     if args.check_update:
         is_update = CheckerManager.check_update()
         print('Have new version: {}'.format('Yes' if is_update else 'No'))
-        
+
         while is_update:
             response = input('Do you want to update? (Y/n) ')
 
