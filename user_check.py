@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.6'
+__version__ = '1.1.8'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -347,8 +347,7 @@ class ServiceManager:
         return False
 
     def restart(self) -> bool:
-        command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
-        return os.system(command) == 0
+        return self.stop() and self.start()
 
     def remove_service(self):
         os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
