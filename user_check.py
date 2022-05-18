@@ -326,8 +326,6 @@ class ServiceManager:
         os.system('rm %s' % self.config)
         os.system('systemctl daemon-reload')
 
-        self.remove_auto_init_config()
-
     def create_systemd_config(self):
         config_template = ''.join(
             [
