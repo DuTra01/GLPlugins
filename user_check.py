@@ -480,7 +480,7 @@ def main():
     if args.uninstall:
         service.remove_service()
         CheckerManager.remove_executable()
-        CheckerManager.remove_config()
+        CheckerUserConfig.remove_config()
 
     if args.run:
         print('Run server...')
