@@ -427,6 +427,7 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
             'expiration_date': expiration_date,
             'expiration_days': expiration_days,
             'time_online': time_online,
+            'version': __version__,
         }
     except Exception as e:
         return {'error': str(e)}
