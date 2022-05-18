@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.8'
+__version__ = '1.1.9'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -222,13 +222,21 @@ class CheckerUserConfig:
         self.config['port'] = value
         self.save_config()
 
+    @property
+    def auto_update(self) -> bool:
+        return self.config.get('auto_update', False)
+
+    @auto_update.setter
+    def auto_update(self, value: bool):
+        self.config['auto_update'] = value
+        self.save_config()
+
     def load_config(self) -> dict:
         default_config = {
             'exclude': [],
             'port': 5000,
+            'auto_update': False,
         }
-
-        logger.info('Loading config from %s', self.path_config)
 
         if os.path.exists(self.path_config):
             with open(self.path_config, 'r') as f:
@@ -385,7 +393,23 @@ class ServiceManager:
             os.system('systemctl enable %s' % self.CONFIG_SYSTEMD)
 
 
+def auto_update(use_thread: bool = True) -> None:
+    checker_user_config = CheckerUserConfig()
+    if not checker_user_config.auto_update:
+        return
+
+    if use_thread:
+        import threading
+
+        threading.Thread(target=CheckerManager.update).start()
+        return
+
+    CheckerManager.update()
+
+
 def check_user(username: str) -> t.Dict[str, t.Any]:
+    auto_update()
+
     try:
         checker = CheckerUserManager(username)
 
@@ -408,6 +432,8 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
 
 
 def kill_user(username: str) -> bool:
+    auto_update()
+
     try:
         checker = CheckerUserManager(username)
         checker.kill_connection()
@@ -467,6 +493,7 @@ def main():
     parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
     parser.add_argument('--create-executable', action='store_true', help='Create executable')
+    parser.add_argument('--auto-update', action='store_true', help='Auto update')
 
     args = parser.parse_args()
     config = CheckerUserConfig()
@@ -480,6 +507,10 @@ def main():
             logger.info('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTABLE_FILE)))
         else:
             logger.error('Create executable failed')
+
+    if args.auto_update:
+        config.auto_update = not config.auto_update
+        logger.info('Auto update: %s' % 'Enabled' if config.auto_update else 'Disabled')
 
     if args.username:
         if args.kill:
@@ -561,7 +592,7 @@ def main():
             if response.lower() == 'n':
                 break
 
-            logger.info('Invalid response')
+            logger.error('Invalid response')
 
         return
 

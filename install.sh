@@ -40,7 +40,7 @@ clear
 
 read -p "Porta: " -e -i 5000 port
 
-python3 chk.py --create-executable --port $port --start
+python3 chk.py --create-executable --auto-update --port $port --start
 
 echo 'URL: http://'$(curl -s icanhazip.com)':'$port'/check/'
 echo ''
