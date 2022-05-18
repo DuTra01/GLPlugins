@@ -6,16 +6,24 @@ import typing as t
 import argparse
 import json
 import socket
+import logging
 
 from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.5'
+__version__ = '1.1.6'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['JSON_SORT_KEYS'] = False
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S',
+)
+logger = logging.getLogger(__name__)
 
 
 class OpenVPNManager:
@@ -168,6 +176,7 @@ class CheckerUserManager:
 class CheckerUserConfig:
     CONFIG_FILE = 'config.json'
     PATH_CONFIG = '/etc/checker/'
+    PATH_CONFIG_OPTIONAL = os.path.join(os.path.expanduser('~'), 'checker')
 
     def __init__(self):
         self.config = self.load_config()
@@ -176,8 +185,14 @@ class CheckerUserConfig:
     def path_config(self) -> str:
         path = os.path.join(self.PATH_CONFIG, self.CONFIG_FILE)
 
-        if not os.path.exists(path):
-            os.makedirs(self.PATH_CONFIG, exist_ok=True)
+        try:
+            if not os.path.exists(path):
+                os.makedirs(self.PATH_CONFIG, exist_ok=True)
+        except PermissionError:
+            path = os.path.join(self.PATH_CONFIG_OPTIONAL, self.CONFIG_FILE)
+
+            if not os.path.exists(path):
+                os.makedirs(self.PATH_CONFIG_OPTIONAL, exist_ok=True)
 
         return path
 
@@ -212,14 +227,13 @@ class CheckerUserConfig:
             'exclude': [],
             'port': 5000,
         }
-        try:
-            if os.path.exists(self.path_config):
-                with open(self.path_config, 'r') as f:
-                    data = json.load(f)
-                    return data if isinstance(data, dict) else default_config
 
-        except Exception:
-            pass
+        logger.info('Loading config from %s', self.path_config)
+
+        if os.path.exists(self.path_config):
+            with open(self.path_config, 'r') as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else default_config
 
         return default_config
 
@@ -250,12 +264,16 @@ class CheckerManager:
         if os.path.exists(to_path):
             os.unlink(to_path)
 
-        print('Creating executable file...')
-        print('From: %s' % of_path)
-        print('To: %s' % to_path)
+        logger.info('Creating executable file...')
+        logger.info('From: %s' % of_path)
+        logger.info('To: %s' % to_path)
 
-        os.chmod(of_path, 0o755)
-        os.symlink(of_path, to_path)
+        try:
+            os.chmod(of_path, 0o755)
+            os.symlink(of_path, to_path)
+            logger.info('Done!')
+        except Exception as e:
+            logger.error(e)
 
     @staticmethod
     def get_data() -> str:
@@ -316,7 +334,7 @@ class ServiceManager:
             os.system('systemctl start %s' % self.CONFIG_SYSTEMD)
             return True
 
-        print('Service is already running')
+        logger.info('Service is already running')
         return False
 
     def stop(self):
@@ -325,7 +343,7 @@ class ServiceManager:
             os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
             return True
 
-        print('Service is already stopped')
+        logger.info('Service is already stopped')
         return False
 
     def restart(self) -> bool:
@@ -357,8 +375,12 @@ class ServiceManager:
 
         config_path = os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
         if not os.path.exists(config_path):
-            with open(config_path, 'w') as f:
-                f.write(config_template)
+            try:
+                with open(config_path, 'w') as f:
+                    f.write(config_template)
+            except PermissionError:
+                logging.warning('Permission denied to create systemd config')
+                return
 
             os.system('systemctl daemon-reload')
             os.system('systemctl enable %s' % self.CONFIG_SYSTEMD)
@@ -403,7 +425,7 @@ def check_user_route(username):
 
         for name in config.exclude:
             if name in check:
-                print('Exclude: %s' % name)
+                logger.info('Exclude: %s' % name)
                 del check[name]
 
         return jsonify(check)
@@ -445,27 +467,33 @@ def main():
     parser.add_argument('--uninstall', action='store_true', help='Uninstall server')
     parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
+    parser.add_argument('--create-executable', action='store_true', help='Create executable')
+
     args = parser.parse_args()
     config = CheckerUserConfig()
     service = ServiceManager()
 
-    if not os.path.exists(CheckerManager.EXECUTABLE_FILE):
+    if args.create_executable and not os.path.exists(CheckerManager.EXECUTABLE_FILE):
         CheckerManager.create_executable()
-        print('Create executable success')
-        print('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTABLE_FILE)))
+
+        if os.path.exists(CheckerManager.EXECUTABLE_FILE):
+            logger.info('Create executable success')
+            logger.info('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTABLE_FILE)))
+        else:
+            logger.error('Create executable failed')
 
     if args.username:
         if args.kill:
             if kill_user(args.username):
-                print('Kill user success')
+                logger.info('Kill user success')
             else:
-                print('Kill user failed')
+                logger.error('Kill user failed')
 
         if args.json:
-            print(json.dumps(check_user(args.username), indent=4))
+            logger.info(json.dumps(check_user(args.username), indent=4))
             return
 
-        print(check_user(args.username))
+        logger.info(check_user(args.username))
 
     if args.port:
         config.port = args.port
@@ -484,8 +512,8 @@ def main():
         os.remove(__file__)
 
     if args.run:
-        print('Run server...')
-        print('Config: %s' % json.dumps(config.config, indent=4))
+        logger.info('Run server...')
+        logger.info('Config: %s' % json.dumps(config.config, indent=4))
         server = app.run(host='0.0.0.0', port=config.port)
         return server
 
@@ -498,7 +526,7 @@ def main():
         return
 
     if args.status:
-        print(service.status())
+        logger.info(service.status())
         return
 
     if args.remove:
@@ -513,16 +541,16 @@ def main():
         is_update = CheckerManager.update()
 
         if is_update:
-            print('Update success')
+            logger.info('Update success')
             return
 
-        print('Not found new version')
+        logger.info('Not found new version')
         return
 
     if args.check_update:
         is_update, version = CheckerManager.check_update()
-        print('Have new version: {}'.format('Yes' if is_update else 'No'))
-        print('Version: {}'.format(version))
+        logger.info('Have new version: {}'.format('Yes' if is_update else 'No'))
+        logger.info('Version: {}'.format(version))
 
         while is_update:
             response = input('Do you want to update? (Y/n) ')
@@ -534,7 +562,7 @@ def main():
             if response.lower() == 'n':
                 break
 
-            print('Invalid response')
+            logger.info('Invalid response')
 
         return
 

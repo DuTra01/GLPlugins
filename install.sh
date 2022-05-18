@@ -37,10 +37,14 @@ fi
 curl -sL -o chk.py $url
 chmod +x chk.py
 clear
+
 read -p "Porta: " -e -i 5000 port
 
-python3 chk.py --port $port --start
+python3 chk.py --create-executable --port $port --start
+
 echo 'URL: http://'$(curl -s icanhazip.com)':'$port'/check/'
 echo ''
 echo 'Aplicativo na versão: 3.3+'
 echo 'URL: http://'$(curl -s icanhazip.com)':'$port
+
+rm -rf $0
