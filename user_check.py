@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.9'
+__version__ = '1.1.10'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -257,69 +257,6 @@ class CheckerUserConfig:
             os.system('rm -rf %s' % CheckerUserConfig.PATH_CONFIG)
 
 
-class CheckerManager:
-    RAW_URL_DATA = 'https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
-
-    EXECUTABLE_PATH = '/usr/bin/'
-    EXECUTABLE_NAME = 'checker'
-    EXECUTABLE_FILE = EXECUTABLE_PATH + EXECUTABLE_NAME
-
-    @staticmethod
-    def create_executable() -> None:
-        of_path = os.path.join(os.path.expanduser('~'), 'chk.py')
-        to_path = CheckerManager.EXECUTABLE_FILE
-
-        if os.path.exists(to_path):
-            os.unlink(to_path)
-
-        logger.info('Creating executable file...')
-        logger.info('From: %s' % of_path)
-        logger.info('To: %s' % to_path)
-
-        try:
-            os.chmod(of_path, 0o755)
-            os.symlink(of_path, to_path)
-            logger.info('Done!')
-        except Exception as e:
-            logger.error(e)
-
-    @staticmethod
-    def get_data() -> str:
-        import requests
-
-        response = requests.get(CheckerManager.RAW_URL_DATA)
-        return response.text
-
-    @staticmethod
-    def check_update() -> t.Union[bool, str]:
-        data = CheckerManager.get_data()
-
-        if data:
-            version = data.split('__version__ = ')[1].split('\n')[0].strip('\'')
-            return version != __version__, version
-
-        return False, __version__
-
-    @staticmethod
-    def update() -> bool:
-        if not CheckerManager.check_update():
-            return False
-
-        data = CheckerManager.get_data()
-        if not data:
-            return False
-
-        with open(__file__, 'w') as f:
-            f.write(data)
-
-        CheckerManager.create_executable()
-        return True
-
-    @staticmethod
-    def remove_executable() -> None:
-        os.remove(CheckerManager.EXECUTABLE_FILE)
-
-
 class ServiceManager:
     CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
     CONFIG_SYSTEMD = 'user_check.service'
@@ -391,6 +328,70 @@ class ServiceManager:
 
             os.system('systemctl daemon-reload')
             os.system('systemctl enable %s' % self.CONFIG_SYSTEMD)
+
+
+class CheckerManager:
+    RAW_URL_DATA = 'https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
+
+    EXECUTABLE_PATH = '/usr/bin/'
+    EXECUTABLE_NAME = 'checker'
+    EXECUTABLE_FILE = EXECUTABLE_PATH + EXECUTABLE_NAME
+
+    @staticmethod
+    def create_executable() -> None:
+        of_path = os.path.join(os.path.expanduser('~'), 'chk.py')
+        to_path = CheckerManager.EXECUTABLE_FILE
+
+        if os.path.exists(to_path):
+            os.unlink(to_path)
+
+        logger.info('Creating executable file...')
+        logger.info('From: %s' % of_path)
+        logger.info('To: %s' % to_path)
+
+        try:
+            os.chmod(of_path, 0o755)
+            os.symlink(of_path, to_path)
+            logger.info('Done!')
+        except Exception as e:
+            logger.error(e)
+
+    @staticmethod
+    def get_data() -> str:
+        import requests
+
+        response = requests.get(CheckerManager.RAW_URL_DATA)
+        return response.text
+
+    @staticmethod
+    def check_update() -> t.Union[bool, str]:
+        data = CheckerManager.get_data()
+
+        if data:
+            version = data.split('__version__ = ')[1].split('\n')[0].strip('\'')
+            return version != __version__, version
+
+        return False, __version__
+
+    @staticmethod
+    def update() -> bool:
+        if not CheckerManager.check_update():
+            return False
+
+        data = CheckerManager.get_data()
+        if not data:
+            return False
+
+        with open(__file__, 'w') as f:
+            f.write(data)
+
+        CheckerManager.create_executable()
+        ServiceManager().restart()
+        return True
+
+    @staticmethod
+    def remove_executable() -> None:
+        os.remove(CheckerManager.EXECUTABLE_FILE)
 
 
 def auto_update(use_thread: bool = True) -> None:
