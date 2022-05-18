@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.4'
+__version__ = '1.1.5'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -481,6 +481,7 @@ def main():
         service.remove_service()
         CheckerManager.remove_executable()
         CheckerUserConfig.remove_config()
+        os.remove(__file__)
 
     if args.run:
         print('Run server...')
@@ -535,10 +536,6 @@ def main():
 
             print('Invalid response')
 
-        return
-
-    if args.version:
-        print(__version__)
         return
 
     if len(sys.argv) == 1:
