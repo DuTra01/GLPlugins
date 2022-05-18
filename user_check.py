@@ -115,105 +115,6 @@ class SSHManager:
             os.kill(pid, 9)
 
 
-class ServiceManager:
-    CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
-    CONFIG_SYSTEMD = 'user_check.service'
-
-    CONFIG_AUTO_INIT_PATH = '/etc/init.d/'
-    CONFIG_AUTO_INIT = 'user_check'
-
-    def __init__(self):
-        self.create_systemd_config()
-        self.create_auto_init_config()
-
-    @property
-    def config(self) -> str:
-        return os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
-
-    def status(self) -> str:
-        command = 'systemctl status %s' % self.CONFIG_SYSTEMD
-        result = os.popen(command).readlines()
-        return ''.join(result)
-
-    def start(self):
-        status = self.status()
-        if 'Active: active' not in status:
-            os.system('systemctl start %s' % self.CONFIG_SYSTEMD)
-            return True
-
-        print('Service is already running')
-        return False
-
-    def stop(self):
-        status = self.status()
-        if 'Active: inactive' not in status:
-            os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
-            return True
-
-        print('Service is already stopped')
-        return False
-
-    def restart(self) -> bool:
-        command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
-        return os.system(command) == 0
-
-    def remove(self):
-        os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
-        os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
-        os.system('rm %s' % self.config)
-        os.system('systemctl daemon-reload')
-
-        self.remove_auto_init_config()
-
-    def create_systemd_config(self):
-        config_template = ''.join(
-            [
-                '[Unit]\n',
-                'Description=User check service\n',
-                'After=network.target\n\n',
-                '[Service]\n',
-                'Type=simple\n',
-                'ExecStart=%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
-                'Restart=always\n',
-                'User=root\n',
-                'Group=root\n\n',
-                '[Install]\n',
-                'WantedBy=multi-user.target\n',
-            ]
-        )
-
-        config_path = os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
-        if not os.path.exists(config_path):
-            with open(config_path, 'w') as f:
-                f.write(config_template)
-
-            os.system('systemctl daemon-reload')
-
-    def create_auto_init_config(self):
-        config_template = ''.join(
-            [
-                '#!/bin/sh\n',
-                '#\n',
-                '# chkconfig: 345 80 20\n',
-                '# description: User check service\n\n',
-                '%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
-            ]
-        )
-
-        config_path = os.path.join(self.CONFIG_AUTO_INIT_PATH, self.CONFIG_AUTO_INIT)
-        if not os.path.exists(config_path):
-            with open(config_path, 'w') as f:
-                f.write(config_template)
-
-            os.system('chmod +x %s' % config_path)
-            os.system('update-rc.d %s defaults' % self.CONFIG_AUTO_INIT)
-
-    def remove_auto_init_config(self):
-        config_path = os.path.join(self.CONFIG_AUTO_INIT_PATH, self.CONFIG_AUTO_INIT)
-        if os.path.exists(config_path):
-            os.system('rm %s' % config_path)
-
-
 class CheckerUserManager:
     def __init__(self, username: str):
         self.username = username
@@ -379,6 +280,78 @@ class CheckerManager:
 
         CheckerManager.create_executable()
         return True
+
+
+class ServiceManager:
+    CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
+    CONFIG_SYSTEMD = 'user_check.service'
+
+    def __init__(self):
+        self.create_systemd_config()
+
+    @property
+    def config(self) -> str:
+        return os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
+
+    def status(self) -> str:
+        command = 'systemctl status %s' % self.CONFIG_SYSTEMD
+        result = os.popen(command).readlines()
+        return ''.join(result)
+
+    def start(self):
+        status = self.status()
+        if 'Active: active' not in status:
+            os.system('systemctl start %s' % self.CONFIG_SYSTEMD)
+            return True
+
+        print('Service is already running')
+        return False
+
+    def stop(self):
+        status = self.status()
+        if 'Active: inactive' not in status:
+            os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
+            return True
+
+        print('Service is already stopped')
+        return False
+
+    def restart(self) -> bool:
+        command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
+        return os.system(command) == 0
+
+    def remove(self):
+        os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
+        os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
+        os.system('rm %s' % self.config)
+        os.system('systemctl daemon-reload')
+
+        self.remove_auto_init_config()
+
+    def create_systemd_config(self):
+        config_template = ''.join(
+            [
+                '[Unit]\n',
+                'Description=User check service\n',
+                'After=network.target\n\n',
+                '[Service]\n',
+                'Type=simple\n',
+                'ExecStart=%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
+                'Restart=always\n',
+                'User=root\n',
+                'Group=root\n\n',
+                '[Install]\n',
+                'WantedBy=multi-user.target\n',
+            ]
+        )
+
+        config_path = os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
+        if not os.path.exists(config_path):
+            with open(config_path, 'w') as f:
+                f.write(config_template)
+
+            os.system('systemctl daemon-reload')
+            os.system('systemctl enable %s' % self.CONFIG_SYSTEMD)
 
 
 def check_user(username: str) -> t.Dict[str, t.Any]:
