@@ -541,7 +541,6 @@ def main():
         service.remove_service()
         CheckerManager.remove_executable()
         CheckerUserConfig.remove_config()
-        os.remove(__file__)
 
     if args.run:
         logger.info('Run server...')
