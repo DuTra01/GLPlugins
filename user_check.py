@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.3'
+__version__ = '1.1.4'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -229,15 +229,23 @@ class CheckerUserConfig:
         with open(self.path_config, 'w') as f:
             f.write(json.dumps(self.config, indent=4))
 
+    @staticmethod
+    def remove_config() -> None:
+        if os.path.exists(CheckerUserConfig.PATH_CONFIG):
+            os.system('rm -rf %s' % CheckerUserConfig.PATH_CONFIG)
+
 
 class CheckerManager:
     RAW_URL_DATA = 'https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
-    EXECUTE_PATH = '/usr/bin/checker'
+
+    EXECUTABLE_PATH = '/usr/bin/'
+    EXECUTABLE_NAME = 'checker'
+    EXECUTABLE_FILE = EXECUTABLE_PATH + EXECUTABLE_NAME
 
     @staticmethod
     def create_executable() -> None:
         of_path = os.path.join(os.path.expanduser('~'), 'chk.py')
-        to_path = CheckerManager.EXECUTE_PATH
+        to_path = CheckerManager.EXECUTABLE_FILE
 
         if os.path.exists(to_path):
             os.unlink(to_path)
@@ -281,6 +289,10 @@ class CheckerManager:
         CheckerManager.create_executable()
         return True
 
+    @staticmethod
+    def remove_executable() -> None:
+        os.remove(CheckerManager.EXECUTABLE_FILE)
+
 
 class ServiceManager:
     CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
@@ -320,7 +332,7 @@ class ServiceManager:
         command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
         return os.system(command) == 0
 
-    def remove(self):
+    def remove_service(self):
         os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
         os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
         os.system('rm %s' % self.config)
@@ -408,7 +420,10 @@ def kill_user_route(username):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Check user v%s' % __version__)
+    parser = argparse.ArgumentParser(
+        description='Check user v%s' % __version__,
+        prog=CheckerManager.EXECUTABLE_NAME,
+    )
     parser.add_argument('-u', '--username', type=str)
     parser.add_argument('-p', '--port', type=int, help='Port to run server')
     parser.add_argument('--json', action='store_true', help='Output in json format')
@@ -427,16 +442,17 @@ def main():
     parser.add_argument('--exclude', type=str, nargs='+', help='Exclude fields')
     parser.add_argument('--include', type=str, nargs='+', help='Include fields')
 
-    parser.add_argument('--version', action='store_true', help='Show version')
+    parser.add_argument('--uninstall', action='store_true', help='Uninstall server')
+    parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
     args = parser.parse_args()
     config = CheckerUserConfig()
     service = ServiceManager()
 
-    if not os.path.exists(CheckerManager.EXECUTE_PATH):
+    if not os.path.exists(CheckerManager.EXECUTABLE_FILE):
         CheckerManager.create_executable()
         print('Create executable success')
-        print('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTE_PATH)))
+        print('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTABLE_FILE)))
 
     if args.username:
         if args.kill:
@@ -461,6 +477,11 @@ def main():
         for name in args.include:
             config.include(name)
 
+    if args.uninstall:
+        service.remove_service()
+        CheckerManager.remove_executable()
+        CheckerManager.remove_config()
+
     if args.run:
         print('Run server...')
         print('Config: %s' % json.dumps(config.config, indent=4))
@@ -480,7 +501,7 @@ def main():
         return
 
     if args.remove:
-        service.remove()
+        service.remove_executable()
         return
 
     if args.restart:
