@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.1'
+__version__ = '1.1.2'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -431,10 +431,7 @@ def check_user_route(username):
 @app.route('/kill/<string:username>')
 def kill_user_route(username):
     try:
-        if kill_user(username):
-            return jsonify({'success': True})
-        else:
-            return jsonify({'error': 'User not found'})
+        return jsonify({'success': kill_user(username)})
     except Exception as e:
         return jsonify({'error': str(e)})
 
