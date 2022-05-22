@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.14'
+__version__ = '1.1.15'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -490,9 +490,27 @@ def main():
     parser.add_argument('--enable-auto-start', action='store_true', help='Enable auto start')
     parser.add_argument('--disable-auto-start', action='store_true', help='Disable auto start')
 
+    parser.add_argument('--start-screen', action='store_true', help='Start server on screen')
+    parser.add_argument('--stop-screen', action='store_true', help='Stop server on screen')
+
     args = parser.parse_args()
     config = CheckerUserConfig()
     service = ServiceManager()
+
+    if args.start_screen:
+        service.stop()
+
+        cmd = 'screen -dmS %s %s --run' % (
+            CheckerManager.EXECUTABLE_NAME,
+            CheckerManager.EXECUTABLE_NAME,
+        )
+        os.system(cmd)
+        return
+
+    if args.stop_screen:
+        cmd = 'screen -X -S %s quit' % CheckerManager.EXECUTABLE_NAME
+        os.system(cmd)
+        return
 
     if args.create_executable and not os.path.exists(CheckerManager.EXECUTABLE_FILE):
         CheckerManager.create_executable()
