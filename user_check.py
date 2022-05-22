@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.12'
+__version__ = '1.1.13'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -222,20 +222,10 @@ class CheckerUserConfig:
         self.config['port'] = value
         self.save_config()
 
-    @property
-    def auto_update(self) -> bool:
-        return self.config.get('auto_update', False)
-
-    @auto_update.setter
-    def auto_update(self, value: bool):
-        self.config['auto_update'] = value
-        self.save_config()
-
     def load_config(self) -> dict:
         default_config = {
             'exclude': [],
             'port': 5000,
-            'auto_update': False,
         }
 
         if os.path.exists(self.path_config):
@@ -399,23 +389,7 @@ class CheckerManager:
         os.remove(CheckerManager.EXECUTABLE_FILE)
 
 
-def auto_update(use_thread: bool = True) -> None:
-    checker_user_config = CheckerUserConfig()
-    if not checker_user_config.auto_update:
-        return
-
-    if use_thread:
-        import threading
-
-        threading.Thread(target=CheckerManager.update).start()
-        return
-
-    CheckerManager.update()
-
-
 def check_user(username: str) -> t.Dict[str, t.Any]:
-    auto_update()
-
     try:
         checker = CheckerUserManager(username)
 
@@ -439,8 +413,6 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
 
 
 def kill_user(username: str) -> bool:
-    auto_update()
-
     try:
         checker = CheckerUserManager(username)
         checker.kill_connection()
@@ -500,7 +472,6 @@ def main():
     parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
     parser.add_argument('--create-executable', action='store_true', help='Create executable')
-    parser.add_argument('--auto-update', action='store_true', help='Auto update')
 
     args = parser.parse_args()
     config = CheckerUserConfig()
