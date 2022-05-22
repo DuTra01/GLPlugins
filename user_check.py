@@ -486,10 +486,6 @@ def main():
         else:
             logger.error('Create executable failed')
 
-    if args.auto_update:
-        config.auto_update = not config.auto_update
-        logger.info('Auto update: %s' % 'Enabled' if config.auto_update else 'Disabled')
-
     if args.username:
         if args.kill:
             if kill_user(args.username):
