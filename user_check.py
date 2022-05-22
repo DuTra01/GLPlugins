@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import Flask, jsonify
 
 __author__ = '@DuTra01'
-__version__ = '1.1.13'
+__version__ = '1.1.14'
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -285,6 +285,10 @@ class ServiceManager:
         command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
         return os.system(command) == 0
 
+    def is_enabled(self) -> bool:
+        command = 'systemctl is-enabled %s' % self.CONFIG_SYSTEMD
+        return os.system(command) == 0
+
     def remove_service(self):
         os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
         os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
@@ -318,7 +322,18 @@ class ServiceManager:
                 return
 
             os.system('systemctl daemon-reload')
+
+    def enable_auto_start(self) -> bool:
+        if not self.is_enabled():
             os.system('systemctl enable %s' % self.CONFIG_SYSTEMD)
+
+        return self.is_enabled()
+
+    def disable_auto_start(self) -> bool:
+        if self.is_enabled():
+            os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
+
+        return not self.is_enabled()
 
 
 class CheckerManager:
@@ -472,6 +487,8 @@ def main():
     parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
     parser.add_argument('--create-executable', action='store_true', help='Create executable')
+    parser.add_argument('--enable-auto-start', action='store_true', help='Enable auto start')
+    parser.add_argument('--disable-auto-start', action='store_true', help='Disable auto start')
 
     args = parser.parse_args()
     config = CheckerUserConfig()
@@ -485,6 +502,20 @@ def main():
             logger.info('Run: {} --help'.format(os.path.basename(CheckerManager.EXECUTABLE_FILE)))
         else:
             logger.error('Create executable failed')
+
+    if args.enable_auto_start:
+        if service.is_enabled():
+            logger.error('Service already enabled')
+        elif not service.enable_auto_start():
+            logger.error('Enable service failed')
+        else:
+            logger.info('Enable service success')
+
+    if args.disable_auto_start:
+        if not service.disable_auto_start():
+            logger.error('Disable service failed')
+        else:
+            logger.info('Disable service success')
 
     if args.username:
         if args.kill:
