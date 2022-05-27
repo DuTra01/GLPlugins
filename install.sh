@@ -6,19 +6,27 @@
 
 # Created by: @DuTra01
 
+url_check_user='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 
-function install(){
-    local mode=$1
-    local url='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
-
+function download_script(){
     if [[ -e chk.py ]]; then
         service user_check stop
         rm -r chk.py
     fi
 
-    curl -sL -o chk.py $url
+    curl -sL -o chk.py $url_check_user
     chmod +x chk.py
     clear
+}
+
+
+function get_version() {
+    local version=$(cat chk.py | grep -Eo "__version__ = '([0-9.]+)'" | cut -d "'" -f 2)
+    echo $version
+}
+
+function install(){
+    local mode=$1
 
     if ! [ -f /usr/bin/python3 ]; then
         echo 'Installing Python3...'
@@ -42,8 +50,10 @@ function install(){
 }
 
 function main(){
-    clear
+    download_script
 
+    echo 'ChecUser v'$(get_version)
+    echo ''
     echo '[01] - Modo Flask (Rest)'
     echo '[02] - Modo Socket'
     echo '[00] - Sair'
