@@ -6,42 +6,67 @@
 
 # Created by: @DuTra01
 
-url='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 
-if ! [ -x "$(command -v pip3)" ]; then
-    echo 'Error: pip3 não está instalado.' >&2
-    echo 'Instalando pip3...'
+function install(){
+    local mode=$1
+    local url='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 
-    sed -i '/mlocate/d' /var/lib/dpkg/statoverride
-    sed -i '/ssl-cert/d' /var/lib/dpkg/statoverride
-    apt-get update
-    
-    if ! apt-get install -y python3-pip; then
-        echo 'Erro ao instalar pip3' >&2
-        exit 1
-    else
-        echo 'Instalado pip3 com sucesso'
+    if [[ -e chk.py ]]; then
+        service user_check stop
+        rm -r chk.py
     fi
-fi
 
-if ! [ -x "$(command -v flask)" ]; then
-    echo 'Instalando flask'
-    pip3 install flask
-fi
+    curl -sL -o chk.py $url
+    chmod +x chk.py
+    clear
 
-if [[ -e chk.py ]]; then
-    service user_check stop
-    rm -r chk.py
-fi
+    if ! [ -f /usr/bin/python3 ]; then
+        echo 'Installing Python3...'
+        sudo apt-get install python3
+    fi
 
-curl -sL -o chk.py $url
-chmod +x chk.py
-clear
+    if [[ $mode == '--flask' && ! -x "$(command -v flask)" ]]; then
+        echo 'Instalando flask..'
+        sudo apt-get install python3-flask
+    fi
 
-read -p "Porta: " -e -i 5000 port
+    if ! [ -x "$(command -v flask)" ]; then
+        echo 'Error: flask no instalado.' >&2
+        read -p 'Deseja usar no modo socket? [s/n] ' mode
+        [[ $mode != 's' ]] && mode='--socket'
+    fi
 
-python3 chk.py --create-executable --enable-auto-start --port $port --start
+    read -p 'Qual porta deseja usar?:' -e -i 5000 port
 
-echo 'URL: http://'$(curl -s icanhazip.com)':'$port
+    python3 chk.py --create-service --create-executable --enable-auto-start --port $port --start $mode
+}
 
-rm -rf $0
+function main(){
+    clear
+
+    echo '[01] - Modo Flask (Rest)'
+    echo '[02] - Modo Socket'
+    echo '[00] - Sair'
+
+    read -p 'Escolha uma opção: ' choice
+
+    case $choice in
+        '01'|'1')
+            install '--flask'
+            rm -rf $0
+            ;;
+        '02'|'2')
+            install '--socket'
+            rm -rf $0
+            ;;
+        '00'|'0')
+            exit 0
+            ;;
+        *)
+            echo 'Opção inválida.'
+            main
+            ;;
+    esac
+}
+
+main $@

@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 
+import typing as t
+
 import os
 import sys
-import typing as t
-import argparse
 import json
+
 import socket
+import threading
+import queue
+
 import logging
+import argparse
 
 from datetime import datetime
-from flask import Flask, jsonify
+
+try:
+    from flask import Flask, jsonify
+
+    use_flask = True
+except ImportError:
+    use_flask = False
 
 __author__ = '@DuTra01'
 __version__ = '1.1.15'
-
-app = Flask(__name__)
-app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
-app.config['JSON_SORT_KEYS'] = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -251,12 +258,17 @@ class ServiceManager:
     CONFIG_SYSTEMD_PATH = '/etc/systemd/system/'
     CONFIG_SYSTEMD = 'user_check.service'
 
-    def __init__(self):
-        self.create_systemd_config()
-
     @property
     def config(self) -> str:
         return os.path.join(self.CONFIG_SYSTEMD_PATH, self.CONFIG_SYSTEMD)
+
+    @property
+    def is_created(self) -> bool:
+        return os.path.exists(self.config)
+
+    @property
+    def is_enabled(self) -> bool:
+        return os.system('systemctl is-enabled %s >/dev/null' % self.CONFIG_SYSTEMD) == 0
 
     def status(self) -> str:
         command = 'systemctl status %s' % self.CONFIG_SYSTEMD
@@ -285,17 +297,13 @@ class ServiceManager:
         command = 'systemctl restart %s' % self.CONFIG_SYSTEMD
         return os.system(command) == 0
 
-    def is_enabled(self) -> bool:
-        command = 'systemctl is-enabled %s' % self.CONFIG_SYSTEMD
-        return os.system(command) == 0
-
     def remove_service(self):
         os.system('systemctl stop %s' % self.CONFIG_SYSTEMD)
         os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
         os.system('rm %s' % self.config)
         os.system('systemctl daemon-reload')
 
-    def create_systemd_config(self):
+    def create_systemd_config(self, mode: str = 'socket'):
         config_template = ''.join(
             [
                 '[Unit]\n',
@@ -303,7 +311,7 @@ class ServiceManager:
                 'After=network.target\n\n',
                 '[Service]\n',
                 'Type=simple\n',
-                'ExecStart=%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
+                'ExecStart=%s %s --run --%s\n' % (sys.executable, os.path.abspath(__file__), mode),
                 'Restart=always\n',
                 'User=root\n',
                 'Group=root\n\n',
@@ -321,19 +329,30 @@ class ServiceManager:
                 logging.warning('Permission denied to create systemd config')
                 return
 
-            os.system('systemctl daemon-reload')
+            os.system('systemctl daemon-reload >/dev/null')
 
     def enable_auto_start(self) -> bool:
-        if not self.is_enabled():
-            os.system('systemctl enable %s' % self.CONFIG_SYSTEMD)
+        if not self.is_enabled:
+            os.system('systemctl enable %s >/dev/null' % self.CONFIG_SYSTEMD)
 
-        return self.is_enabled()
+        return self.is_enabled
 
     def disable_auto_start(self) -> bool:
-        if self.is_enabled():
-            os.system('systemctl disable %s' % self.CONFIG_SYSTEMD)
+        if self.is_enabled:
+            os.system('systemctl disable %s >/dev/null' % self.CONFIG_SYSTEMD)
 
-        return not self.is_enabled()
+        return not self.is_enabled
+
+    def create_service(self, mode: str = 'socket') -> bool:
+        self.create_systemd_config(mode)
+        return self.is_created
+
+    def update_service(self, mode: str = 'socket') -> bool:
+        if self.is_created:
+            self.remove_service()
+
+        self.create_systemd_config(mode)
+        return self.is_created and self.restart()
 
 
 class CheckerManager:
@@ -436,28 +455,161 @@ def kill_user(username: str) -> bool:
         return False
 
 
-@app.route('/check/<string:username>')
-def check_user_route(username):
-    try:
-        config = CheckerUserConfig()
-        check = check_user(username)
+class ParserServerRequest:
+    def __init__(self, data: bytes):
+        self.data = data
+        self.command = None
+        self.content = None
 
-        for name in config.exclude:
-            if name in check:
-                logger.info('Exclude: %s' % name)
-                del check[name]
+        self.commands_allowed = ['CHECK' 'KILL']
 
-        return jsonify(check)
-    except Exception as e:
-        return jsonify({'error': str(e)})
+    def parse(self) -> None:
+        try:
+            data = self.data.decode('utf-8')
+            json_data = json.loads(data)
+
+            self.command = json_data['command']
+            self.content = json_data['content']
+
+        except Exception:
+            self.command = None
+            self.content = None
 
 
-@app.route('/kill/<string:username>')
-def kill_user_route(username):
-    try:
-        return jsonify({'success': kill_user(username)})
-    except Exception as e:
-        return jsonify({'error': str(e)})
+class FunctionExecutor:
+    def __init__(self, command: str, content: str):
+        self.command = command
+        self.content = content
+
+    def execute(self) -> t.Dict[str, t.Any]:
+        if self.command == 'CHECK':
+            return check_user(self.content)
+
+        if self.command == 'KILL':
+            return kill_user(self.content)
+
+        return {'error': 'Command not allowed'}
+
+
+class WorkerThread(threading.Thread):
+    def __init__(self, queue: queue.Queue):
+        super(WorkerThread, self).__init__()
+        self.queue = queue
+        self.daemon = True
+
+        self.is_running = False
+
+    def parse_request(self, data: bytes) -> t.Dict[str, t.Any]:
+        request = ParserServerRequest(data.strip())
+        request.parse()
+
+        function_executor = FunctionExecutor(request.command, request.content)
+        return function_executor.execute()
+
+    def run(self):
+        self.is_running = True
+        while self.is_running:
+            try:
+                client, addr = self.queue.get()
+                logger.info('Client connected: %s' % addr)
+
+                data = client.recv(8192 * 8)
+                if not data:
+                    continue
+
+                response = self.parse_request(data)
+
+                client.send(json.dumps(response).encode('utf-8'))
+                client.close()
+            except Exception as e:
+                logger.error(e)
+
+    def stop(self):
+        self.is_running = False
+
+
+class ThreadPool:
+    def __init__(self, max_workers: int = 10):
+        self.queue = queue.Queue()
+        self.workers = []
+        self.max_workers = max_workers
+
+    def start(self):
+        for _ in range(self.max_workers):
+            worker = WorkerThread(self.queue)
+            worker.start()
+            self.workers.append(worker)
+
+    def join(self):
+        for worker in self.workers:
+            worker.stop()
+            worker.join()
+
+    def add_task(self, task: socket.socket, *args):
+        self.queue.put((task, args))
+
+
+class Server:
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        self.pool = ThreadPool()
+        self.pool.start()
+
+    def handle(self, client, addr) -> None:
+        self.pool.add_task(client, addr)
+
+    def run(self) -> None:
+        self.socket.bind((self.host, self.port))
+        self.socket.listen(5)
+
+        logger.info('Server started on %s:%s' % (self.host, self.port))
+
+        try:
+            while True:
+                client, addr = self.socket.accept()
+                self.handle(client, addr)
+
+        except KeyboardInterrupt:
+            pass
+
+        finally:
+            self.socket.close()
+            logger.info('Server stopped')
+
+
+def create_app_flask():
+    app = Flask(__name__)
+    app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
+    app.config['JSON_SORT_KEYS'] = False
+
+    @app.route('/check/<string:username>')
+    def check_user_route(username):
+        try:
+            config = CheckerUserConfig()
+            check = check_user(username)
+
+            for name in config.exclude:
+                if name in check:
+                    logger.info('Exclude: %s' % name)
+                    del check[name]
+
+            return jsonify(check)
+        except Exception as e:
+            return jsonify({'error': str(e)})
+
+    @app.route('/kill/<string:username>')
+    def kill_user_route(username):
+        try:
+            return jsonify({'success': kill_user(username)})
+        except Exception as e:
+            return jsonify({'error': str(e)})
+
+    return app
 
 
 def main():
@@ -468,7 +620,14 @@ def main():
     parser.add_argument('-u', '--username', type=str)
     parser.add_argument('-p', '--port', type=int, help='Port to run server')
     parser.add_argument('--json', action='store_true', help='Output in json format')
+
     parser.add_argument('--run', action='store_true', help='Run server')
+    parser.add_argument('--flask', action='store_true', help='Run flask server')
+    parser.add_argument('--socket', action='store_true', help='Run socket server')
+
+    parser.add_argument('--create-service', action='store_true', help='Create service')
+    parser.add_argument('--update-service', action='store_true', help='Update service')
+
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
     parser.add_argument('--status', action='store_true', help='Check server status')
@@ -512,6 +671,24 @@ def main():
         os.system(cmd)
         return
 
+    if args.create_service:
+        mode = args.flask and 'flask' or 'socket'
+        message = 'Create service success'
+
+        if not service.create_service(mode):
+            message = 'Create service failed'
+
+        logger.info(message)
+
+    if args.update_service:
+        mode = args.flask and 'flask' or 'socket'
+        message = 'Update service success'
+
+        if not service.update_service(mode):
+            message = 'Update service failed'
+
+        logger.info(message)
+
     if args.create_executable and not os.path.exists(CheckerManager.EXECUTABLE_FILE):
         CheckerManager.create_executable()
 
@@ -522,7 +699,7 @@ def main():
             logger.error('Create executable failed')
 
     if args.enable_auto_start:
-        if service.is_enabled():
+        if service.is_enabled:
             logger.error('Service already enabled')
         elif not service.enable_auto_start():
             logger.error('Enable service failed')
@@ -564,12 +741,24 @@ def main():
         CheckerUserConfig.remove_config()
 
     if args.run:
-        logger.info('Run server...')
-        logger.info('Config: %s' % json.dumps(config.config, indent=4))
-        server = app.run(host='0.0.0.0', port=config.port)
-        return server
+        if not use_flask and args.flask:
+            logger.error('Flask server not installed')
+            return
+
+        if use_flask and args.flask:
+            logger.info('Run flask server')
+            app = create_app_flask()
+            app.run(host='0.0.0.0', port=config.port)
+        else:
+            logger.info('Run Socket server')
+            server = Server('0.0.0.0', config.port)
+            server.run()
 
     if args.start:
+        if not service.is_created:
+            logger.error('Service not created')
+            return
+
         service.start()
         return
 
