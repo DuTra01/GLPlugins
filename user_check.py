@@ -23,7 +23,7 @@ except ImportError:
     use_flask = False
 
 __author__ = '@DuTra01'
-__version__ = '1.1.15'
+__version__ = '2.1.0'
 
 logging.basicConfig(
     level=logging.INFO,
