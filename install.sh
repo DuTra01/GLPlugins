@@ -8,7 +8,7 @@
 
 url_check_user='https://raw.githubusercontent.com/DuTra01/GLPlugins/master/user_check.py'
 
-function download_script(){
+function download_script() {
     if [[ -e chk.py ]]; then
         service user_check stop
         rm -r chk.py
@@ -19,13 +19,27 @@ function download_script(){
     clear
 }
 
-
 function get_version() {
     local version=$(cat chk.py | grep -Eo "__version__ = '([0-9.]+)'" | cut -d "'" -f 2)
     echo $version
 }
 
-function install(){
+function check_installed() {
+    if [[ -e /usr/bin/checker ]]; then
+        clear
+        echo 'CheckUser Ja esta instalado'
+        read -p 'Deseja desinstalar? [s/n]: ' -n 1 -r choice
+
+        if [[ $choice =~ ^[Ss]$ ]]; then
+            service user_check stop 1>/dev/null 2>&1
+            checker --uninstall 1>/dev/null 2>&1
+            rm -rf chk.py 1>/dev/null 2>&1
+            echo 'CheckUser desinstalado com sucesso'
+        fi
+    fi
+}
+
+function install() {
     local mode=$1
 
     if ! [ -f /usr/bin/python3 ]; then
@@ -49,7 +63,8 @@ function install(){
     python3 chk.py --create-service --create-executable --enable-auto-start --port $port --start $mode
 }
 
-function main(){
+function main() {
+    check_installed
     download_script
 
     echo 'ChecUser v'$(get_version)
@@ -61,21 +76,21 @@ function main(){
     read -p 'Escolha uma opção: ' choice
 
     case $choice in
-        '01'|'1')
-            install '--flask'
-            rm -rf $0
-            ;;
-        '02'|'2')
-            install '--socket'
-            rm -rf $0
-            ;;
-        '00'|'0')
-            exit 0
-            ;;
-        *)
-            echo 'Opção inválida.'
-            main
-            ;;
+    '01' | '1')
+        install '--flask'
+        rm -rf $0
+        ;;
+    '02' | '2')
+        install '--socket'
+        rm -rf $0
+        ;;
+    '00' | '0')
+        exit 0
+        ;;
+    *)
+        echo 'Opção inválida.'
+        main
+        ;;
     esac
 }
 
