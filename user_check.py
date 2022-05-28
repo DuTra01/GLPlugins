@@ -17,7 +17,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 __author__ = '@DuTra01'
-__version__ = '2.1.2'
+__version__ = '2.1.3'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -592,11 +592,11 @@ def main():
     parser.add_argument('--run', action='store_true', help='Run server')
 
     parser.add_argument('--create-service', action='store_true', help='Create service')
+    parser.add_argument('--remove-service', action='store_true', help='Remove service')
 
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
     parser.add_argument('--status', action='store_true', help='Check server status')
-    parser.add_argument('--remove', action='store_true', help='Remove server')
     parser.add_argument('--restart', action='store_true', help='Restart server')
 
     parser.add_argument('--kill', action='store_true', help='Kill user')
@@ -608,7 +608,6 @@ def main():
     parser.add_argument('--include', type=str, nargs='+', help='Include fields')
 
     parser.add_argument('--uninstall', action='store_true', help='Uninstall server')
-    parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
     parser.add_argument('--create-executable', action='store_true', help='Create executable')
     parser.add_argument('--enable-auto-start', action='store_true', help='Enable auto start')
@@ -616,6 +615,8 @@ def main():
 
     parser.add_argument('--start-screen', action='store_true', help='Start server on screen')
     parser.add_argument('--stop-screen', action='store_true', help='Stop server on screen')
+
+    parser.add_argument('--version', action='version', version='%(prog)s v' + str(__version__))
 
     args = parser.parse_args()
     config = CheckerUserConfig()
@@ -641,6 +642,14 @@ def main():
 
         if not service.create_service():
             message = 'Create service failed'
+
+        logger.info(message)
+
+    if args.remove_service:
+        message = 'Remove service success'
+
+        if not service.remove_service():
+            message = 'Remove service failed'
 
         logger.info(message)
 
@@ -714,10 +723,6 @@ def main():
 
     if args.status:
         logger.info(service.status())
-        return
-
-    if args.remove:
-        service.remove_executable()
         return
 
     if args.restart:
