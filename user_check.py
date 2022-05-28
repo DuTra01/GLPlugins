@@ -14,16 +14,10 @@ import logging
 import argparse
 
 from datetime import datetime
-
-try:
-    from flask import Flask, jsonify
-
-    use_flask = True
-except ImportError:
-    use_flask = False
+from urllib.parse import urlparse
 
 __author__ = '@DuTra01'
-__version__ = '2.1.1'
+__version__ = '2.1.2'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -303,7 +297,7 @@ class ServiceManager:
         os.system('rm %s' % self.config)
         os.system('systemctl daemon-reload')
 
-    def create_systemd_config(self, mode: str = 'socket'):
+    def create_systemd_config(self):
         config_template = ''.join(
             [
                 '[Unit]\n',
@@ -311,7 +305,7 @@ class ServiceManager:
                 'After=network.target\n\n',
                 '[Service]\n',
                 'Type=simple\n',
-                'ExecStart=%s %s --run --%s\n' % (sys.executable, os.path.abspath(__file__), mode),
+                'ExecStart=%s %s --run\n' % (sys.executable, os.path.abspath(__file__)),
                 'Restart=always\n',
                 'User=root\n',
                 'Group=root\n\n',
@@ -343,16 +337,9 @@ class ServiceManager:
 
         return not self.is_enabled
 
-    def create_service(self, mode: str = 'socket') -> bool:
-        self.create_systemd_config(mode)
+    def create_service(self) -> bool:
+        self.create_systemd_config()
         return self.is_created
-
-    def update_service(self, mode: str = 'socket') -> bool:
-        if self.is_created:
-            self.remove_service()
-
-        self.create_systemd_config(mode)
-        return self.is_created and self.restart()
 
 
 class CheckerManager:
@@ -472,10 +459,12 @@ class ParserServerRequest:
     def parse(self) -> None:
         try:
             data = self.data.decode('utf-8')
-            json_data = json.loads(data)
 
-            self.command = json_data['command']
-            self.content = json_data['content']
+            first_line = data.split('\n')[0]
+            path = first_line.split(' ')[1]
+
+            self.command = path.split('/')[1]
+            self.content = path.split('/')[2].split('?')[0]
 
         except Exception:
             self.command = None
@@ -488,10 +477,10 @@ class FunctionExecutor:
         self.content = content
 
     def execute(self) -> t.Dict[str, t.Any]:
-        if self.command == 'CHECK':
+        if self.command.upper() == 'CHECK':
             return check_user(self.content)
 
-        if self.command == 'KILL':
+        if self.command.upper() == 'KILL':
             return kill_user(self.content)
 
         return {'error': 'Command not allowed'}
@@ -523,9 +512,10 @@ class WorkerThread(threading.Thread):
                 if not data:
                     continue
 
-                response = self.parse_request(data)
+                response_data = 'HTTP/1.1 200 OK\r\n Content-Type: application/json\r\n\r\n'
+                response_data += json.dumps(self.parse_request(data))
 
-                client.send(json.dumps(response).encode('utf-8'))
+                client.send(response_data.encode('utf-8'))
                 client.close()
 
                 logger.info('Client disconnected: %s' % addr)
@@ -590,37 +580,6 @@ class Server:
             logger.info('Server stopped')
 
 
-def create_app_flask():
-    app = Flask(__name__)
-    app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
-    app.config['JSON_SORT_KEYS'] = False
-
-    @app.route('/check/<string:username>')
-    def check_user_route(username):
-        try:
-            config = CheckerUserConfig()
-            check = check_user(username)
-
-            for name in config.exclude:
-                if name in check:
-                    logger.info('Exclude: %s' % name)
-                    del check[name]
-
-            return jsonify(check)
-        except Exception as e:
-            return jsonify({'error': str(e)})
-
-    @app.route('/kill/<string:username>')
-    def kill_user_route(username):
-        try:
-            check = kill_user(username)
-            return jsonify(check)
-        except Exception as e:
-            return jsonify({'error': str(e)})
-
-    return app
-
-
 def main():
     parser = argparse.ArgumentParser(
         description='Check user v%s' % __version__,
@@ -631,11 +590,8 @@ def main():
     parser.add_argument('--json', action='store_true', help='Output in json format')
 
     parser.add_argument('--run', action='store_true', help='Run server')
-    parser.add_argument('--flask', action='store_true', help='Run flask server')
-    parser.add_argument('--socket', action='store_true', help='Run socket server')
 
     parser.add_argument('--create-service', action='store_true', help='Create service')
-    parser.add_argument('--update-service', action='store_true', help='Update service')
 
     parser.add_argument('--start', action='store_true', help='Start server')
     parser.add_argument('--stop', action='store_true', help='Stop server')
@@ -681,20 +637,10 @@ def main():
         return
 
     if args.create_service:
-        mode = args.flask and 'flask' or 'socket'
         message = 'Create service success'
 
-        if not service.create_service(mode):
+        if not service.create_service():
             message = 'Create service failed'
-
-        logger.info(message)
-
-    if args.update_service:
-        mode = args.flask and 'flask' or 'socket'
-        message = 'Update service success'
-
-        if not service.update_service(mode):
-            message = 'Update service failed'
 
         logger.info(message)
 
@@ -750,18 +696,9 @@ def main():
         CheckerUserConfig.remove_config()
 
     if args.run:
-        if not use_flask and args.flask:
-            logger.error('Flask server not installed')
-            return
-
-        if use_flask and args.flask:
-            logger.info('Run flask server')
-            app = create_app_flask()
-            app.run(host='0.0.0.0', port=config.port)
-        else:
-            logger.info('Run Socket server')
-            server = Server('0.0.0.0', config.port)
-            server.run()
+        logger.info('Run Socket server')
+        server = Server('0.0.0.0', config.port)
+        server.run()
 
     if args.start:
         if not service.is_created:
