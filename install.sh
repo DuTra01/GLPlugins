@@ -28,7 +28,7 @@ function check_installed() {
     if [[ -e /usr/bin/checker ]]; then
         clear
         echo 'CheckUser Ja esta instalado'
-        read -p 'Deseja desinstalar? [s/n]: ' -n 1 -r choice
+        read -p 'Deseja desinstalar? [s/n]: ' choice
 
         if [[ $choice =~ ^[Ss]$ ]]; then
             service user_check stop 1>/dev/null 2>&1
@@ -40,6 +40,9 @@ function check_installed() {
 }
 
 function main() {
+    check_installed
+    download_script
+
     if ! [ -f /usr/bin/python3 ]; then
         echo 'Installing Python3...'
         sudo apt-get install python3
