@@ -17,7 +17,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 __author__ = '@DuTra01'
-__version__ = '2.1.3'
+__version__ = '2.1.4'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -548,14 +548,14 @@ class ThreadPool:
 
 
 class Server:
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, num_workers: int = 10):
         self.host = host
         self.port = port
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-        self.pool = ThreadPool()
+        self.pool = ThreadPool(num_workers)
         self.pool.start()
 
     def handle(self, client, addr) -> None:
@@ -590,6 +590,7 @@ def main():
     parser.add_argument('--json', action='store_true', help='Output in json format')
 
     parser.add_argument('--run', action='store_true', help='Run server')
+    parser.add_argument('--workers', type=int, default=10, help='Number of workers')
 
     parser.add_argument('--create-service', action='store_true', help='Create service')
     parser.add_argument('--remove-service', action='store_true', help='Remove service')
@@ -705,8 +706,10 @@ def main():
         CheckerUserConfig.remove_config()
 
     if args.run:
+        workers = args.workers
+        logger.info('Workers: %s' % workers)
         logger.info('Run Socket server')
-        server = Server('0.0.0.0', config.port)
+        server = Server('0.0.0.0', config.port, workers)
         server.run()
 
     if args.start:
