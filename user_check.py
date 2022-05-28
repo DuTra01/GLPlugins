@@ -23,7 +23,7 @@ except ImportError:
     use_flask = False
 
 __author__ = '@DuTra01'
-__version__ = '2.1.0'
+__version__ = '2.1.1'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -446,13 +446,19 @@ def check_user(username: str) -> t.Dict[str, t.Any]:
         return {'error': str(e)}
 
 
-def kill_user(username: str) -> bool:
+def kill_user(username: str) -> dict:
+    result = {
+        'success': True,
+        'error': None,
+    }
+
     try:
         checker = CheckerUserManager(username)
         checker.kill_connection()
-        return True
-    except Exception:
-        return False
+        return result
+    except Exception as e:
+        result['success'] = False
+        result['error'] = str(e)
 
 
 class ParserServerRequest:
@@ -521,6 +527,8 @@ class WorkerThread(threading.Thread):
 
                 client.send(json.dumps(response).encode('utf-8'))
                 client.close()
+
+                logger.info('Client disconnected: %s' % addr)
             except Exception as e:
                 logger.error(e)
 
@@ -605,7 +613,8 @@ def create_app_flask():
     @app.route('/kill/<string:username>')
     def kill_user_route(username):
         try:
-            return jsonify({'success': kill_user(username)})
+            check = kill_user(username)
+            return jsonify(check)
         except Exception as e:
             return jsonify({'error': str(e)})
 
